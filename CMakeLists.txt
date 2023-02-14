@@ -12,7 +12,7 @@ SET_PROPERTY(CACHE NNPACK_BACKEND PROPERTY STRINGS auto psimd scalar)
 OPTION(NNPACK_CONVOLUTION_ONLY "Build only NNPACK functions for convolutional layer" OFF)
 OPTION(NNPACK_INFERENCE_ONLY "Build only NNPACK functions for inference" OFF)
 OPTION(NNPACK_CUSTOM_THREADPOOL "Build NNPACK for custom thread pool" OFF)
-SET(NNPACK_LIBRARY_TYPE "default" CACHE STRING "Type of library (shared, static, or default) to build")
+SET(NNPACK_LIBRARY_TYPE "static" CACHE STRING "Type of library (shared, static, or default) to build")
 SET_PROPERTY(CACHE NNPACK_LIBRARY_TYPE PROPERTY STRINGS default static shared)
 OPTION(NNPACK_BUILD_TESTS "Build NNPACK unit tests" ON)
 
