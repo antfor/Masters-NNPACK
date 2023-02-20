@@ -5,6 +5,7 @@
 
 #include <nnpack/fft-constants.h>
 
+#include <arm_sve.h>
 #include <psimd.h>
 #include <psimd/butterfly.h>
 

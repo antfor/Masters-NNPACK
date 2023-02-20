@@ -1,9 +1,10 @@
 #pragma once
 
 #include <nnpack/fft-constants.h>
+#include <arm_sve.h>
 #include <psimd.h>
 #include <psimd/butterfly.h>
-#include <psimd/fft/soa.h>
+#include <sve/fft/soa.h>
 
 
 static inline void psimd_fft8_dualreal_f32(
