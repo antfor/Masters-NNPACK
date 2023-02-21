@@ -1,203 +1,202 @@
 #pragma once
 
 #include <nnpack/fft-constants.h>
+#include <scalar/fft/soa.h>
 #include <arm_sve.h>
-#include <psimd.h>
-#include <psimd/butterfly.h>
-#include <sve/fft/soa.h>
 
 
-static inline void psimd_fft8_dualreal_f32(
-	psimd_f32 s0123[restrict static 1],
-	psimd_f32 s4567[restrict static 1],
-	psimd_f32 h0123[restrict static 1],
-	psimd_f32 h4567[restrict static 1])
+static inline void scalar_fft8_dualreal(
+	const float seq[restrict static 16],
+	float x0[restrict static 1],
+	float y0[restrict static 1],
+	float x1r[restrict static 1],
+	float y1r[restrict static 1],
+	float x2r[restrict static 1],
+	float y2r[restrict static 1],
+	float x3r[restrict static 1],
+	float y3r[restrict static 1],
+	float x4[restrict static 1],
+	float y4[restrict static 1],
+	float x1i[restrict static 1],
+	float y1i[restrict static 1],
+	float x2i[restrict static 1],
+	float y2i[restrict static 1],
+	float x3i[restrict static 1],
+	float y3i[restrict static 1])
 {
-	psimd_fft8_soa_f32(s0123, s4567, h0123, h4567);
+	float w0r, w1r, w2r, w3r, w4r, w5r, w6r, w7r;
+	float w0i, w1i, w2i, w3i, w4i, w5i, w6i, w7i;
+	scalar_fft8_soa(seq,
+		&w0r, &w1r, &w2r, &w3r, &w4r, &w5r, &w6r, &w7r,
+		&w0i, &w1i, &w2i, &w3i, &w4i, &w5i, &w6i, &w7i);
 
-	psimd_f32 x0123 = *s0123, x4567 = *s4567;
-	psimd_f32 y0123 = *h0123, y4567 = *h4567;
+	*x0  = w0r;
+	*y0  = w0i;
+	*x1r = 0.5f * (w1r + w7r);
+	*y1r = 0.5f * (w1i + w7i);
+	*x2r = 0.5f * (w2r + w6r);
+	*y2r = 0.5f * (w2i + w6i);
+	*x3r = 0.5f * (w3r + w5r);
+	*y3r = 0.5f * (w3i + w5i);
 
-	/*
-	 * Target:
-	 *   x0 y0 .5(x1+x7) .5(y1+y7) .5(x2+x6) .5(y2+y6) .5(x3+x5) .5(y3+y5) 
-	 *   x4 y4 .5(y1-y7) .5(x7-x1) .5(y2-y6) .5(x6-x2) .5(y3-y5) .5(x5-x3)
-	 */
-
-	#ifdef __clang__
-		const psimd_f32 x0765 = __builtin_shufflevector(x4567, x0123, 4, 3, 2, 1);
-		const psimd_f32 y0765 = __builtin_shufflevector(y4567, y0123, 4, 3, 2, 1);
-	#else
-		const psimd_f32 x0765 = __builtin_shuffle(x4567, x0123, (psimd_s32) { 4, 3, 2, 1 });
-		const psimd_f32 y0765 = __builtin_shuffle(y4567, y0123, (psimd_s32) { 4, 3, 2, 1 });
-	#endif
-
-	const psimd_f32 half = psimd_splat_f32(0.5f);
-	const psimd_f32 r0246 = half * (x0123 + x0765);
-	const psimd_f32 r1357 = half * (y0123 + y0765);
-
-	const psimd_f32 i_246 = half * (y0123 - y0765);
-	const psimd_f32 i_357 = half * (x0765 - x0123);
-
-	#ifdef __clang__
-		const psimd_f32 i0246 = __builtin_shufflevector(i_246, x4567, 4, 1, 2, 3);
-		const psimd_f32 i1357 = __builtin_shufflevector(i_357, y4567, 4, 1, 2, 3);
-	#else
-		const psimd_f32 i0246 = __builtin_shuffle(i_246, x4567, (psimd_s32) { 4, 1, 2, 3 });
-		const psimd_f32 i1357 = __builtin_shuffle(i_357, y4567, (psimd_s32) { 4, 1, 2, 3 });
-	#endif
-
-	/* Interleave and store */
-	*s0123 = psimd_interleave_lo_f32(r0246, r1357);
-	*s4567 = psimd_interleave_hi_f32(r0246, r1357);
-	*h0123 = psimd_interleave_lo_f32(i0246, i1357);
-	*h4567 = psimd_interleave_hi_f32(i0246, i1357);
+	*x4  = w4r;
+	*y4  = w4i;
+	*x1i = 0.5f * (w1i - w7i);
+	*y1i = 0.5f * (w7r - w1r);
+	*x2i = 0.5f * (w2i - w6i);
+	*y2i = 0.5f * (w6r - w2r);
+	*x3i = 0.5f * (w3i - w5i);
+	*y3i = 0.5f * (w5r - w3r);
 }
 
-static inline void psimd_fft16_dualreal_f32(
-	psimd_f32 s0123[restrict static 1],
-	psimd_f32 s4567[restrict static 1],
-	psimd_f32 s89AB[restrict static 1],
-	psimd_f32 sCDEF[restrict static 1],
-	psimd_f32 h0123[restrict static 1],
-	psimd_f32 h4567[restrict static 1],
-	psimd_f32 h89AB[restrict static 1],
-	psimd_f32 hCDEF[restrict static 1])
+static inline void scalar_fft16_dualreal(
+	const float seq[restrict static 32],
+	float x0[restrict static 1],
+	float y0[restrict static 1],
+	float x1r[restrict static 1],
+	float y1r[restrict static 1],
+	float x2r[restrict static 1],
+	float y2r[restrict static 1],
+	float x3r[restrict static 1],
+	float y3r[restrict static 1],
+	float x4r[restrict static 1],
+	float y4r[restrict static 1],
+	float x5r[restrict static 1],
+	float y5r[restrict static 1],
+	float x6r[restrict static 1],
+	float y6r[restrict static 1],
+	float x7r[restrict static 1],
+	float y7r[restrict static 1],
+	float x8[restrict static 1],
+	float y8[restrict static 1],
+	float x1i[restrict static 1],
+	float y1i[restrict static 1],
+	float x2i[restrict static 1],
+	float y2i[restrict static 1],
+	float x3i[restrict static 1],
+	float y3i[restrict static 1],
+	float x4i[restrict static 1],
+	float y4i[restrict static 1],
+	float x5i[restrict static 1],
+	float y5i[restrict static 1],
+	float x6i[restrict static 1],
+	float y6i[restrict static 1],
+	float x7i[restrict static 1],
+	float y7i[restrict static 1])
 {
-	psimd_fft16_soa_f32(s0123, s4567, s89AB, sCDEF, h0123, h4567, h89AB, hCDEF);
+	float w0r, w1r, w2r, w3r, w4r, w5r, w6r, w7r, w8r, w9r, w10r, w11r, w12r, w13r, w14r, w15r;
+	float w0i, w1i, w2i, w3i, w4i, w5i, w6i, w7i, w8i, w9i, w10i, w11i, w12i, w13i, w14i, w15i;
+	scalar_fft16_soa(seq,
+		&w0r, &w1r, &w2r, &w3r, &w4r, &w5r, &w6r, &w7r, &w8r, &w9r, &w10r, &w11r, &w12r, &w13r, &w14r, &w15r,
+		&w0i, &w1i, &w2i, &w3i, &w4i, &w5i, &w6i, &w7i, &w8i, &w9i, &w10i, &w11i, &w12i, &w13i, &w14i, &w15i);
 
-	psimd_f32 x0123 = *s0123, x4567 = *s4567, x89AB = *s89AB, xCDEF = *sCDEF;
-	psimd_f32 y0123 = *h0123, y4567 = *h4567, y89AB = *h89AB, yCDEF = *hCDEF;
+	*x0  = w0r;
+	*y0  = w0i;
+	*x1r = 0.5f * (w1r + w15r);
+	*y1r = 0.5f * (w1i + w15i);
+	*x2r = 0.5f * (w2r + w14r);
+	*y2r = 0.5f * (w2i + w14i);
+	*x3r = 0.5f * (w3r + w13r);
+	*y3r = 0.5f * (w3i + w13i);
+	*x4r = 0.5f * (w4r + w12r);
+	*y4r = 0.5f * (w4i + w12i);
+	*x5r = 0.5f * (w5r + w11r);
+	*y5r = 0.5f * (w5i + w11i);
+	*x6r = 0.5f * (w6r + w10r);
+	*y6r = 0.5f * (w6i + w10i);
+	*x7r = 0.5f * (w7r + w9r);
+	*y7r = 0.5f * (w7i + w9i);
 
-	#ifdef __clang__
-		const psimd_f32 x0FED = __builtin_shufflevector(xCDEF, x0123, 4, 3, 2, 1);
-		const psimd_f32 y0FED = __builtin_shufflevector(yCDEF, y0123, 4, 3, 2, 1);
-		const psimd_f32 xCBA9 = __builtin_shufflevector(x89AB, xCDEF, 4, 3, 2, 1);
-		const psimd_f32 yCBA9 = __builtin_shufflevector(y89AB, yCDEF, 4, 3, 2, 1);
-	#else
-		const psimd_f32 x0FED = __builtin_shuffle(xCDEF, x0123, (psimd_s32) { 4, 3, 2, 1 });
-		const psimd_f32 y0FED = __builtin_shuffle(yCDEF, y0123, (psimd_s32) { 4, 3, 2, 1 });
-		const psimd_f32 xCBA9 = __builtin_shuffle(x89AB, xCDEF, (psimd_s32) { 4, 3, 2, 1 });
-		const psimd_f32 yCBA9 = __builtin_shuffle(y89AB, yCDEF, (psimd_s32) { 4, 3, 2, 1 });
-	#endif
-
-	const psimd_f32 half = psimd_splat_f32(0.5f);
-	const psimd_f32 r0246 = half * (x0123 + x0FED);
-	const psimd_f32 r1357 = half * (y0123 + y0FED);
-	const psimd_f32 r8ACE = half * (x4567 + xCBA9);
-	const psimd_f32 r9BDF = half * (y4567 + yCBA9);
-
-	const psimd_f32 i_246 = half * (y0123 - y0FED);
-	const psimd_f32 i_357 = half * (x0FED - x0123);
-	const psimd_f32 i8ACE = half * (y4567 - yCBA9);
-	const psimd_f32 i9BDF = half * (xCBA9 - x4567);
-
-	#ifdef __clang__
-		const psimd_f32 i0246 = __builtin_shufflevector(i_246, x89AB, 4, 1, 2, 3);
-		const psimd_f32 i1357 = __builtin_shufflevector(i_357, y89AB, 4, 1, 2, 3);
-	#else
-		const psimd_f32 i0246 = __builtin_shuffle(i_246, x89AB, (psimd_s32) { 4, 1, 2, 3 });
-		const psimd_f32 i1357 = __builtin_shuffle(i_357, y89AB, (psimd_s32) { 4, 1, 2, 3 });
-	#endif
-
-	/* Interleave and store */
-	*s0123 = psimd_interleave_lo_f32(r0246, r1357);
-	*s4567 = psimd_interleave_hi_f32(r0246, r1357);
-	*s89AB = psimd_interleave_lo_f32(r8ACE, r9BDF);
-	*sCDEF = psimd_interleave_hi_f32(r8ACE, r9BDF);
-	*h0123 = psimd_interleave_lo_f32(i0246, i1357);
-	*h4567 = psimd_interleave_hi_f32(i0246, i1357);
-	*h89AB = psimd_interleave_lo_f32(i8ACE, i9BDF);
-	*hCDEF = psimd_interleave_hi_f32(i8ACE, i9BDF);
+	*x8  = w8r;
+	*y8  = w8i;
+	*x1i = 0.5f * (w1i - w15i);
+	*y1i = 0.5f * (w15r - w1r);
+	*x2i = 0.5f * (w2i - w14i);
+	*y2i = 0.5f * (w14r - w2r);
+	*x3i = 0.5f * (w3i - w13i);
+	*y3i = 0.5f * (w13r - w3r);
+	*x4i = 0.5f * (w4i - w12i);
+	*y4i = 0.5f * (w12r - w4r);
+	*x5i = 0.5f * (w5i - w11i);
+	*y5i = 0.5f * (w11r - w5r);
+	*x6i = 0.5f * (w6i - w10i);
+	*y6i = 0.5f * (w10r - w6r);
+	*x7i = 0.5f * (w7i - w9i);
+	*y7i = 0.5f * (w9r - w7r);
 }
 
-static inline void psimd_ifft8_dualreal_f32(
-	psimd_f32 s0123[restrict static 1],
-	psimd_f32 s4567[restrict static 1],
-	psimd_f32 h0123[restrict static 1],
-	psimd_f32 h4567[restrict static 1])
+static inline void scalar_ifft8_dualreal(
+	float x0, float y0, float x1r, float y1r, float x2r, float y2r, float x3r, float y3r,
+	float x4, float y4, float x1i, float y1i, float x2i, float y2i, float x3i, float y3i,
+	float seq[restrict static 16])
 {
-	const psimd_f32 r0123 = *s0123;
-	const psimd_f32 r4567 = *s4567;
-	const psimd_f32 i0123 = *h0123;
-	const psimd_f32 i4567 = *h4567;
+	float w0r = x0;
+	float w0i = y0;
+	float w1r = x1r - y1i;
+	float w1i = x1i + y1r;
+	float w2r = x2r - y2i;
+	float w2i = x2i + y2r;
+	float w3r = x3r - y3i;
+	float w3i = x3i + y3r;
 
-	const psimd_f32 r0246 = psimd_concat_even_f32(r0123, r4567);
-	const psimd_f32 r1357 = psimd_concat_odd_f32(r0123, r4567);
-	const psimd_f32 i0246 = psimd_concat_even_f32(i0123, i4567);
-	const psimd_f32 i1357 = psimd_concat_odd_f32(i0123, i4567);
+	float w4r = x4;
+	float w4i = y4;
+	float w5r = y3i + x3r;
+	float w5i = y3r - x3i;
+	float w6r = y2i + x2r;
+	float w6i = y2r - x2i;
+	float w7r = y1i + x1r;
+	float w7i = y1r - x1i;
 
-	#ifdef __clang__
-		*s0123 = __builtin_shufflevector(r0246 - i1357, r0246, 4, 1, 2, 3);
-		*s4567 = __builtin_shufflevector(r0246 + i1357, i0246, 4, 3, 2, 1);
-		*h0123 = __builtin_shufflevector(r1357 + i0246, r1357, 4, 1, 2, 3);
-		*h4567 = __builtin_shufflevector(r1357 - i0246, i1357, 4, 3, 2, 1);
-	#else
-		*s0123 = __builtin_shuffle(r0246 - i1357, r0246, (psimd_s32) { 4, 1, 2, 3 });
-		*s4567 = __builtin_shuffle(r0246 + i1357, i0246, (psimd_s32) { 4, 3, 2, 1 });
-		*h0123 = __builtin_shuffle(r1357 + i0246, r1357, (psimd_s32) { 4, 1, 2, 3 });
-		*h4567 = __builtin_shuffle(r1357 - i0246, i1357, (psimd_s32) { 4, 3, 2, 1 });
-	#endif
-
-	psimd_ifft8_soa_f32(s0123, s4567, h0123, h4567);
+	scalar_ifft8_soa(
+		w0r, w1r, w2r, w3r, w4r, w5r, w6r, w7r,
+		w0i, w1i, w2i, w3i, w4i, w5i, w6i, w7i,
+		seq);
 }
 
-static inline void psimd_ifft16_dualreal_f32(
-	psimd_f32 s0123[restrict static 1],
-	psimd_f32 s4567[restrict static 1],
-	psimd_f32 s89AB[restrict static 1],
-	psimd_f32 sCDEF[restrict static 1],
-	psimd_f32 h0123[restrict static 1],
-	psimd_f32 h4567[restrict static 1],
-	psimd_f32 h89AB[restrict static 1],
-	psimd_f32 hCDEF[restrict static 1])
+static inline void scalar_ifft16_dualreal(
+	float x0,  float y0,  float x1r, float y1r, float x2r, float y2r, float x3r, float y3r,
+	float x4r, float y4r, float x5r, float y5r, float x6r, float y6r, float x7r, float y7r,
+	float x8,  float y8,  float x1i, float y1i, float x2i, float y2i, float x3i, float y3i,
+	float x4i, float y4i, float x5i, float y5i, float x6i, float y6i, float x7i, float y7i,
+	float seq[restrict static 16])
 {
-	const psimd_f32 r0123 = *s0123;
-	const psimd_f32 r4567 = *s4567;
-	const psimd_f32 r89AB = *s89AB;
-	const psimd_f32 rCDEF = *sCDEF;
-	const psimd_f32 i0123 = *h0123;
-	const psimd_f32 i4567 = *h4567;
-	const psimd_f32 i89AB = *h89AB;
-	const psimd_f32 iCDEF = *hCDEF;
+	float w0r = x0;
+	float w0i = y0;
+	float w1r = x1r - y1i;
+	float w1i = x1i + y1r;
+	float w2r = x2r - y2i;
+	float w2i = x2i + y2r;
+	float w3r = x3r - y3i;
+	float w3i = x3i + y3r;
+	float w4r = x4r - y4i;
+	float w4i = x4i + y4r;
+	float w5r = x5r - y5i;
+	float w5i = x5i + y5r;
+	float w6r = x6r - y6i;
+	float w6i = x6i + y6r;
+	float w7r = x7r - y7i;
+	float w7i = x7i + y7r;
 
-	const psimd_f32 r0246 = psimd_concat_even_f32(r0123, r4567);
-	const psimd_f32 r1357 = psimd_concat_odd_f32(r0123, r4567);
-	const psimd_f32 r8ACE = psimd_concat_even_f32(r89AB, rCDEF);
-	const psimd_f32 r9BDF = psimd_concat_odd_f32(r89AB, rCDEF);
-	const psimd_f32 i0246 = psimd_concat_even_f32(i0123, i4567);
-	const psimd_f32 i1357 = psimd_concat_odd_f32(i0123, i4567);
-	const psimd_f32 i8ACE = psimd_concat_even_f32(i89AB, iCDEF);
-	const psimd_f32 i9BDF = psimd_concat_odd_f32(i89AB, iCDEF);
+	float w8r  = x8;
+	float w8i  = y8;
+	float w9r  = y7i + x7r;
+	float w9i  = y7r - x7i;
+	float w10r = y6i + x6r;
+	float w10i = y6r - x6i;
+	float w11r = y5i + x5r;
+	float w11i = y5r - x5i;
+	float w12r = y4i + x4r;
+	float w12i = y4r - x4i;
+	float w13r = y3i + x3r;
+	float w13i = y3r - x3i;
+	float w14r = y2i + x2r;
+	float w14i = y2r - x2i;
+	float w15r = y1i + x1r;
+	float w15i = y1r - x1i;
 
-	const psimd_f32 sCBA9 = r8ACE + i9BDF;
-	const psimd_f32 s_FED = r0246 + i1357;
-	const psimd_f32 hCBA9 = r9BDF - i8ACE;
-	const psimd_f32 h_FED = r1357 - i0246;
-
-	#ifdef __clang__
-		*s0123 = __builtin_shufflevector(r0246 - i1357, r0246, 4, 1, 2, 3);
-	#else
-		*s0123 = __builtin_shuffle(r0246 - i1357, r0246, (psimd_s32) { 4, 1, 2, 3 });
-	#endif
-	*s4567 = r8ACE - i9BDF;
-	#ifdef __clang__
-		*s89AB = __builtin_shufflevector(sCBA9, i0246, 4, 3, 2, 1);
-		*sCDEF = __builtin_shufflevector(s_FED, sCBA9, 4, 3, 2, 1);
-		*h0123 = __builtin_shufflevector(r1357 + i0246, r1357, 4, 1, 2, 3);
-	#else
-		*s89AB = __builtin_shuffle(sCBA9, i0246, (psimd_s32) { 4, 3, 2, 1 });
-		*sCDEF = __builtin_shuffle(s_FED, sCBA9, (psimd_s32) { 4, 3, 2, 1 });
-		*h0123 = __builtin_shuffle(r1357 + i0246, r1357, (psimd_s32) { 4, 1, 2, 3 });
-	#endif
-	*h4567 = r9BDF + i8ACE;
-	#ifdef __clang__
-		*h89AB = __builtin_shufflevector(hCBA9, i1357, 4, 3, 2, 1);
-		*hCDEF = __builtin_shufflevector(h_FED, hCBA9, 4, 3, 2, 1);
-	#else
-		*h89AB = __builtin_shuffle(hCBA9, i1357, (psimd_s32) { 4, 3, 2, 1 });
-		*hCDEF = __builtin_shuffle(h_FED, hCBA9, (psimd_s32) { 4, 3, 2, 1 });
-	#endif
-
-	psimd_ifft16_soa_f32(s0123, s4567, s89AB, sCDEF, h0123, h4567, h89AB, hCDEF);
+	scalar_ifft16_soa(
+		w0r, w1r, w2r, w3r, w4r, w5r, w6r, w7r, w8r, w9r, w10r, w11r, w12r, w13r, w14r, w15r,
+		w0i, w1i, w2i, w3i, w4i, w5i, w6i, w7i, w8i, w9i, w10i, w11i, w12i, w13i, w14i, w15i,
+		seq);
 }
