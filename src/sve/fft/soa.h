@@ -3,9 +3,122 @@
 #include <nnpack/fft-constants.h>
 #include <scalar/butterfly.h>
 #include <arm_sve.h>
+#include <stdio.h>
+
+static inline void saxpy_sve(float32_t *x, float32_t *y, float32_t a, uint32_t n)
+{
+        uint32_t i;
+        svbool_t predicate;
+        svfloat32_t xseg;
+        svfloat32_t yseg;
+        uint64_t numVals = svlen_f32(xseg);
+        for (i = 0; i < n; i += numVals)
+        {
+                predicate = svwhilelt_b32_s32(i, n);
+                xseg = svld1_f32(predicate, x + i);             // ld1w for x
+                yseg = svld1_f32(predicate, y + i);             // ld1w for y
+                yseg = svmla_n_f32_m(predicate, yseg, xseg, a); // y+a*x
+                svst1_f32(predicate, y + i, yseg);              // st1w for y <-y+a*x
+        }
+}
+static inline void vecprint(float32_t *vec, uint32_t n)
+{
+        int i;
+        for (i = 0; i < n; i++)
+        {
+                printf("[%f]", vec[i]);
+        }
+        printf("\n");
+}
+
+static inline  void vecset(float32_t *vec, float32_t val, uint32_t n)
+{
+        int i;
+        for (i = 0; i < n; i++)
+        {
+                vec[i] = val;
+        }
+}
+
+static inline void test_sve()
+{
+        uint32_t N = 10;
+        float32_t x[N];
+        float32_t y[N];
+        vecset(x, 1.5, N);
+        vecset(y, 2.0, N);
+        vecprint(x, N);
+        vecprint(y, N);
+        // choose implementation
+        saxpy_sve(x, y, 2.0, N);
+        // saxpy_asm(x, y, 2.0, N);
+        vecprint(y, N);
+}
+
+static inline void butterfly_sve(uint32_t N, svfloat32_t *pwir, float32_t *indR, float32_t *indI){
+
+	svbool_t p1;
+	svfloat32_t wir = *pwir; 
+	uint32_t N_DIV_2 = N/2;
 
 
-static inline void scalar_fft8_soa(
+	uint64_t numVals = svlen_f32(wir);
+	for(uint32_t i=0; i < N; i+=numVals){
+		p1 = svwhilelt_b32_s32(i, N); 
+
+
+		const svfloat32_t svindRS = svld1(p1, &indR[i]);
+		const svfloat32_t wrs = svld1_gather_index_f32(p1,wir,svindRS);
+
+		const svfloat32_t svindRE = svld1(p1, &indR[i + N_DIV_2]);
+		const svfloat32_t wre = svld1_gather_index_f32(p1,wir,svindRE);
+	
+	
+		const svfloat32_t svindIS = svld1(p1, &indI[i]);
+		const svfloat32_t wis = svld1_gather_index_f32(p1,wir,svindIS);
+
+		const svfloat32_t svindIE = svld1(p1, &indI[i + N_DIV_2]);
+		const svfloat32_t wie = svld1_gather_index_f32(p1,wir,svindIE);
+
+
+		svst1_scatter_index(p1, wir, svindRS, svadd_f32_m(p1, wrs, wre));
+		svst1_scatter_index(p1, wir, svindRE, svsub_f32_m(p1, wrs, wre));
+
+		svst1_scatter_index(p1, wir, svindIS, svadd_f32_m(p1, wis, wie));
+		svst1_scatter_index(p1, wir, svindIE, svsub_f32_m(p1, wis, wie));
+
+	}
+}
+
+static inline void twiddlefactor_sve(uint32_t N, svfloat32_t *pwir, float32_t *ind, int conjugate){
+
+
+	float32_t twIR[8] = {SIN_0PI_OVER_2, COS_0PI_OVER_2,SIN_1PI_OVER_2,COS_1PI_OVER_2 ,SIN_0PI_OVER_2,COS_0PI_OVER_2 ,SIN_1PI_OVER_2,COS_1PI_OVER_2};
+	uint32_t N_DIV_2 = N/2;
+
+	svfloat32_t wir = *pwir;
+	svfloat23_t tmp_wir;
+	svbool_t p1;
+
+	//svint32_t rot = conjugate ? 270 : 90;
+	svint32_t rot = 270;
+	uint64_t numVals = svlen_f32(wir);
+
+	for(uint32_t  i=0; i < N; i+=numVals){ // i needs to be even ?
+		p1 = svwhilelt_b32_s32(i, N); 
+
+		const svfloat32_t svind = svld1(p1, &ind[i]);
+		const svfloat32_t wirD = svld1_gather_index_f32(p1, wir, svind);
+		const svfloat32_t cirD = svld1(p1,&twIR[i]);
+
+		svcmla_m(p1,tmp_wir , wirD, cirD, 0);
+		svcmla_m(p1,tmp_wir , wirD, cirD, rot); 
+
+		svst1_scatter_index(p1, wir, svind, tmp_wir);
+	}
+}
+
+static inline void scalar_fft8_soa_new(
 	const float t[restrict static 16],
 	float f0r[restrict static 1],
 	float f1r[restrict static 1],
@@ -24,6 +137,209 @@ static inline void scalar_fft8_soa(
 	float f6i[restrict static 1],
 	float f7i[restrict static 1])
 {
+	printf("sve_fft8_soa\n");
+	//test_sve();
+	/* Load inputs and FFT8: butterfly */
+	 
+	/*old load
+	float w0r = t[0], w4r = t[4];
+	float w1r = t[1], w5r = t[5];
+	float w2r = t[2], w6r = t[6];
+	float w3r = t[3], w7r = t[7];
+
+	float w0i = t[8], w4i = t[12];
+	float w1i = t[9], w5i = t[13];
+	float w2i = t[10], w6i = t[14];
+	float w3i = t[11], w7i = t[15];
+	*/
+
+	uint32_t i;
+    svbool_t predicate;
+	uint32_t BLOCK_SIZE = 8;
+	uint32_t BLOCK_SIZE_DIV_2 = 4;
+	svfloat32_t wr0123; //todo make tuple
+	svfloat32_t wr4567; //todo make tuple
+	svfloat32_t wi0123; //todo make tuple
+	svfloat32_t wi4567; //todo make tuple
+
+	uint64_t numVals = svlen_f32(wr0123);
+	// load
+	for(i = 0; i < BLOCK_SIZE_DIV_2; i+=numVals){
+
+		predicate = svwhilelt_b32_s32(i, BLOCK_SIZE);       
+		wr0123 = svld1_f32(predicate, t + i);  
+		wr4567 = svld1_f32(predicate, t + i + BLOCK_SIZE_DIV_2);                          // ld1w for x
+        wi0123 = svld1_f32(predicate, t + i + BLOCK_SIZE + BLOCK_SIZE_DIV_2);             // ld1w for y
+        wi4567 = svld1_f32(predicate, t + i + BLOCK_SIZE + BLOCK_SIZE_DIV_2);
+	}
+
+	//old butterfly
+	/*
+	scalar_butterfly(&w0r, &w4r);
+	scalar_butterfly(&w1r, &w5r);
+	scalar_butterfly(&w2r, &w6r);
+	scalar_butterfly(&w3r, &w7r);
+
+	scalar_butterfly(&w0i, &w4i);
+	scalar_butterfly(&w1i, &w5i);
+	scalar_butterfly(&w2i, &w6i);
+	scalar_butterfly(&w3i, &w7i);
+	*/
+
+	svfloat32_t new_wr0123; //todo make tuple
+	svfloat32_t new_wr4567; 
+	svfloat32_t new_wi0123; //todo make tuple
+	svfloat32_t new_wi4567;
+	
+	// butterfly
+	for(i = 0; i < BLOCK_SIZE_DIV_2; i+=numVals){
+		predicate = svwhilelt_b32_s32(i, BLOCK_SIZE_DIV_2); 
+
+		new_wr0123 = svadd_f32_m(predicate, wr0123, wr4567);
+		new_wr4567 = svsub_f32_m(predicate, wr0123, wr4567);
+
+		new_wi0123 = svadd_f32_m(predicate, wi0123, wi4567);
+		new_wi4567 = svsub_f32_m(predicate, wi0123, wi4567);
+		
+	}
+
+	svbool_t p1,p2;
+	svfloat32_t wr;  
+	svfloat32_t wi;
+
+	//uint64_t numVals = svlen_f32(wr0123);
+	for(i=0; i < BLOCK_SIZE_DIV_2; i+=numVals){
+		p1 = svwhilelt_b32_s32(i, BLOCK_SIZE_DIV_2); 
+		//p2 = svwhilelt_b32_s32(i + BLOCK_SIZE_DIV_2, BLOCK_SIZE); 
+
+		const svfloat32_t wr0123 =  svld1(p1, &t[i]);
+		const svfloat32_t wr4567 =  svld1(p1, &t[i + BLOCK_SIZE_DIV_2]);
+
+		const svfloat32_t wi0123 =  svld1(p1, &t[i + BLOCK_SIZE]);
+		const svfloat32_t wi4567 =  svld1(p1, &t[i + BLOCK_SIZE_DIV_2 + BLOCK_SIZE]);
+
+		wr = svadd_f32_m(p1, wr0123, wr4567);
+		svst1_scatter_offset(p1, wr, BLOCK_SIZE_DIV_2 ,svsub_f32_m(p1, wr0123, wr4567));
+
+		wi = svadd_f32_m(p1, wi0123, wi4567);
+		svst1_scatter_offset(p1, wi, BLOCK_SIZE_DIV_2 ,svsub_f32_m(p1, wi0123, wi4567));
+	}
+
+	//twiddle
+
+	float32_t twIR[8] = {SIN_0PI_OVER_2, COS_0PI_OVER_2,SIN_1PI_OVER_2,COS_1PI_OVER_2 ,SIN_0PI_OVER_2,COS_0PI_OVER_2 ,SIN_1PI_OVER_2,COS_1PI_OVER_2};
+	svfloat32_t cir;
+
+	svfloat32_t tmpir = svdup_f32(0.0f);
+	svfloat32_t wir;
+	svint32_t indi, indr;
+	
+	for(i=0; i < BLOCK_SIZE; i+=numVals){ // i needs to be even ?
+		p1 = svwhilelt_b32_s32(i, BLOCK_SIZE); 
+		p2 = svwhilelt_b32_s32(i*2.0f, BLOCK_SIZE*2.0f); 
+
+		//load twiddle factors
+		cir = svld1(p1,&twIR[i]);
+
+		const svfloat32_t wi4567 = svld1_offset(p1, wi, BLOCK_SIZE_DIV_2);
+		indi = svindex_s32(0.0f,2.0f); 
+		svst1_scatter_index(p1, wir,indi, wi4567);
+
+		const svfloat32_t wr4567 = svld1_offset(p1, wr, BLOCK_SIZE_DIV_2);
+		indr = svindex_s32(1.0f,2.0f); 
+		svst1_scatter_index(p1, wir,indr, wr4567);
+		
+		 
+		svcmla_z(p2, tmpir, wir, cir, 0);
+		svcmla_z(p2, tmpir, wir, cir, 270);
+
+
+	}
+
+	/*
+	 * 2x FFT4: butterfly
+	 */
+	scalar_butterfly(&w0r, &w2r);
+	scalar_butterfly(&w1r, &w3r);
+	scalar_butterfly(&w4r, &w6r);
+	scalar_butterfly(&w5r, &w7r);
+
+	scalar_butterfly(&w0i, &w2i);
+	scalar_butterfly(&w1i, &w3i);
+	scalar_butterfly_with_negated_b(&w4i, &w6i);
+	scalar_butterfly_with_negated_b(&w5i, &w7i);
+
+	/*
+	 * 2x FFT4: multiplication by twiddle factors:
+	 *
+	 *   w3r, w3i = w3i, -w3r
+	 *   w7r, w7i = w7i, -w7r
+	 *
+	 * (negation of w3i and w7i is merged into the next butterfly)
+	 */
+	scalar_swap(&w3r, &w3i);
+	scalar_swap(&w7r, &w7i);
+
+	/*
+	 * 4x FFT2: butterfly
+	 */
+	scalar_butterfly(&w0r, &w1r);
+	scalar_butterfly(&w0i, &w1i);
+	scalar_butterfly(&w2r, &w3r);
+	scalar_butterfly_with_negated_b(&w2i, &w3i);
+	scalar_butterfly(&w4r, &w5r);
+	scalar_butterfly(&w4i, &w5i);
+	scalar_butterfly(&w6r, &w7r);
+	scalar_butterfly_with_negated_b(&w6i, &w7i);
+
+	/* Bit reversal */
+	scalar_swap(&w1r, &w4r);
+	scalar_swap(&w3r, &w6r);
+
+	scalar_swap(&w1i, &w4i);
+	scalar_swap(&w3i, &w6i);
+
+	*f0r = w0r;
+	*f0i = w0i;
+	*f1r = w1r;
+	*f1i = w1i;
+	*f2r = w2r;
+	*f2i = w2i;
+	*f3r = w3r;
+	*f3i = w3i;
+	*f4r = w4r;
+
+	*f4i = w4i;
+	*f5r = w5r;
+	*f5i = w5i;
+	*f6r = w6r;
+	*f6i = w6i;
+	*f7r = w7r;
+	*f7i = w7i;
+}
+
+static inline void scalar_fft8_soa_old(
+	const float t[restrict static 16],
+	float f0r[restrict static 1],
+	float f1r[restrict static 1],
+	float f2r[restrict static 1],
+	float f3r[restrict static 1],
+	float f4r[restrict static 1],
+	float f5r[restrict static 1],
+	float f6r[restrict static 1],
+	float f7r[restrict static 1],
+	float f0i[restrict static 1],
+	float f1i[restrict static 1],
+	float f2i[restrict static 1],
+	float f3i[restrict static 1],
+	float f4i[restrict static 1],
+	float f5i[restrict static 1],
+	float f6i[restrict static 1],
+	float f7i[restrict static 1])
+{
+	printf("scalar_fft8_soa\n");
+	test_sve();
+	//test_sve();
 	/* Load inputs and FFT8: butterfly */
 	float w0r = t[0], w4r = t[4];
 	scalar_butterfly(&w0r, &w4r);

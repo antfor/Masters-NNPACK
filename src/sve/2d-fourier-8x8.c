@@ -1,10 +1,11 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <arm_sve.h>
+#include <stdio.h>
 
-#include <scalar/fft/real.h>
-#include <scalar/fft/soa.h>
-#include <scalar/fft/dualreal.h>
+#include <sve/fft/real.h>
+#include <sve/fft/soa.h>
+#include <sve/fft/dualreal.h>
 
 #include <nnpack/utils.h>
 #include <nnpack/activations.h>
@@ -20,7 +21,6 @@ void nnp_fft8x8_with_offset__scalar(
 	uint32_t row_count, uint32_t column_count,
 	uint32_t row_offset, uint32_t column_offset)
 {
-
 	const uint32_t simd_width = 1;
 	transform_stride /= sizeof(float);
 
@@ -90,6 +90,7 @@ void nnp_fft8x8_with_offset__scalar(
 	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
 		float f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r;
 		float f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i;
+		printf("scalar_fft8\n");
 		scalar_fft8_soa(
 			&block[row][0],
 			&f0r, &f1r, &f2r, &f3r, &f4r, &f5r, &f6r, &f7r,

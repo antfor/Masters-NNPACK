@@ -1,10 +1,11 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <arm_sve.h>
+#include <stdio.h>
 
-#include <scalar/fft/real.h>
-#include <scalar/fft/soa.h>
-#include <scalar/fft/dualreal.h>
+#include <sve/fft/real.h>
+#include <sve/fft/soa.h>
+#include <sve/fft/dualreal.h>
 
 #include <nnpack/utils.h>
 #include <nnpack/activations.h>

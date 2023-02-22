@@ -1,7 +1,7 @@
 #pragma once
 
 #include <nnpack/fft-constants.h>
-#include <scalar/fft/aos.h>
+#include <sve/fft/aos.h>
 #include <arm_sve.h>
 
 
