@@ -10,6 +10,8 @@
 #include <nnpack/utils.h>
 #include <nnpack/activations.h>
 
+#include <stdlib.h> // todo remove
+
 
 #define BLOCK_SIZE 8
 
@@ -90,8 +92,8 @@ void nnp_fft8x8_with_offset__scalar(
 	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
 		float f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r;
 		float f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i;
-		printf("scalar_fft8\n");
-		scalar_fft8_soa(
+		//printf("scalar_fft8\n");
+		scalar_fft8_soa_sve(
 			&block[row][0],
 			&f0r, &f1r, &f2r, &f3r, &f4r, &f5r, &f6r, &f7r,
 			&f0i, &f1i, &f2i, &f3i, &f4i, &f5i, &f6i, &f7i);
@@ -120,6 +122,7 @@ void nnp_fft8x8_with_offset__scalar(
 		transform[1] = f7i;
 		transform += transform_stride;	
 	}
+	//exit(0); //todo remove
 }
 
 #if !NNP_INFERENCE_ONLY
