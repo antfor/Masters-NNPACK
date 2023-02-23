@@ -5,22 +5,6 @@
 #include <arm_sve.h>
 #include <stdio.h>
 
-static inline void saxpy_sve(float32_t *x, float32_t *y, float32_t a, uint32_t n)
-{
-        uint32_t i;
-        svbool_t predicate;
-        svfloat32_t xseg;
-        svfloat32_t yseg;
-        uint64_t numVals = svlen_f32(xseg);
-        for (i = 0; i < n; i += numVals)
-        {
-                predicate = svwhilelt_b32_s32(i, n);
-                xseg = svld1_f32(predicate, x + i);             // ld1w for x
-                yseg = svld1_f32(predicate, y + i);             // ld1w for y
-                yseg = svmla_n_f32_m(predicate, yseg, xseg, a); // y+a*x
-                svst1_f32(predicate, y + i, yseg);              // st1w for y <-y+a*x
-        }
-}
 static inline void vecprint(float32_t *vec, uint32_t n)
 {
         int i;
@@ -31,31 +15,31 @@ static inline void vecprint(float32_t *vec, uint32_t n)
         printf("\n");
 }
 
-static inline  void vecset(float32_t *vec, float32_t val, uint32_t n)
-{
-        int i;
-        for (i = 0; i < n; i++)
-        {
-                vec[i] = val;
-        }
+static inline void butterfly_sve(uint32_t BLOCK_SIZE, float32_t *wir, int32_t *ind){
+
+	svbool_t p1;
+	
+	svfloat32_t ab, new_ab;
+	svint32_t svind;
+
+	uint32_t N = BLOCK_SIZE*2;
+
+	//printf("hej\n");
+
+	uint64_t numVals = svlen(ab);
+	for(uint32_t i=0; i < N; i+=numVals){
+		p1 = svwhilelt_b32_s32(i, N); 
+
+		svind = svld1(p1, &ind[i]);
+		ab = svld1_gather_index(p1, wir, svind);
+		new_ab = svcadd_m(p1, ab, ab, 270);
+	
+		svst1_scatter_index(p1, wir, svind, new_ab);
+
+	}
 }
 
-static inline void test_sve()
-{
-        uint32_t N = 10;
-        float32_t x[N];
-        float32_t y[N];
-        vecset(x, 1.5, N);
-        vecset(y, 2.0, N);
-        vecprint(x, N);
-        vecprint(y, N);
-        // choose implementation
-        saxpy_sve(x, y, 2.0, N);
-        // saxpy_asm(x, y, 2.0, N);
-        vecprint(y, N);
-}
-
-static inline void butterfly_sve(uint32_t BLOCK_SIZE, float32_t *wir, int32_t *indR, int32_t *indI){
+static inline void butterfly_sve_old(uint32_t BLOCK_SIZE, float32_t *wir, int32_t *indR, int32_t *indI){
 
 	svbool_t p1;
 	
@@ -105,7 +89,7 @@ static inline void twiddle_sve(uint32_t BLOCK_SIZE, float32_t *wir, int32_t *ind
 
 	uint64_t numVals = svlen(tmp_wir);
 
-	for(uint32_t  i=0; i < N; i+=numVals){ // i needs to be even ?
+	for(uint32_t  i=0; i < N; i+=numVals){
 		p1 = svwhilelt_b32_s32(i, N); 
 
 		svind = svld1(p1, &ind[i]);
@@ -236,13 +220,9 @@ static inline void scalar_fft8_soa_sve(
 	//vecprint(&wir[0],16);
 	
 	{ /* butterfly and multiplication by twiddle factors */
-	
-		int32_t indR[8] = {0,2,4,6,8,10,12,14}; // 0,1,2,3,4,5,6,7
-		int32_t indI[8] = {1,3,5,7,9,11,13,15}; // 0,1,2,3,4,5,6,7
-		
 
-		butterfly_sve(BLOCK_SIZE, &wir[0], &indR[0], &indI[0]);
-
+		int32_t index[16] = {0,8,2,10,4,12,6,14,  1,9,3,11,5,13,7,15};
+		butterfly_sve(BLOCK_SIZE, &wir[0], &index[0]);
 
 		//printf("butterfly 1 sve: \n");
 		//vecprint(&wir[0],16);
@@ -258,10 +238,9 @@ static inline void scalar_fft8_soa_sve(
 	}
 	
 	{ /* 2x FFT4: butterfly and multiplication by twiddle factors:*/
-		int32_t indR[8] = {0,2,8,10,4,6,12,14}; // 0,1,4,5,2,3,6,7
-		int32_t indI[8] = {1,3,9,11,5,7,13,15}; // 0,1,4,5,2,3,6,7
-		
-		butterfly_sve(BLOCK_SIZE, &wir[0], &indR[0], &indI[0]);
+
+		int32_t index[16] = {0,4,2,6,8,12,10,14,  1,5,3,7,9,13,11,15};
+		butterfly_sve(BLOCK_SIZE, &wir[0], &index[0]);
 
 		//printf("butterfly 2 sve: \n");
 		//vecprint(&wir[0],16);
@@ -276,11 +255,9 @@ static inline void scalar_fft8_soa_sve(
 	}
 
 	{ /* 4x FFT2: butterfly */
-		int32_t indR[8] = {0,8,4,12,2,10,6,14}; // 0,4,2,6,1,5,3,7
-		int32_t indI[8] = {1,9,5,13,3,11,7,15}; // 0,4,2,6,1,5,3,7
-		
 
-		butterfly_sve(BLOCK_SIZE, &wir[0], &indR[0], &indI[0]);
+		int32_t index[16] = {0,2,4,6,8,10,12,14,  1,3,5,7,9,11,13,15};
+		butterfly_sve(BLOCK_SIZE, &wir[0], &index[0]);
 
 		//printf("butterfly 3 sve: \n");
 		//vecprint(&wir[0],16);
@@ -352,6 +329,7 @@ static inline void scalar_fft8_soa(
 	scalar_butterfly(&w1r, &w5r);
 	scalar_butterfly(&w2r, &w6r);
 	scalar_butterfly(&w3r, &w7r);
+
 	scalar_butterfly(&w0i, &w4i);
 	scalar_butterfly(&w1i, &w5i);
 	scalar_butterfly(&w2i, &w6i);
@@ -387,12 +365,13 @@ static inline void scalar_fft8_soa(
 	 * 2x FFT4: butterfly
 	 */
 	scalar_butterfly(&w0r, &w2r);
-	scalar_butterfly(&w0i, &w2i);
 	scalar_butterfly(&w1r, &w3r);
-	scalar_butterfly(&w1i, &w3i);
 	scalar_butterfly(&w4r, &w6r);
-	scalar_butterfly_with_negated_b(&w4i, &w6i);
 	scalar_butterfly(&w5r, &w7r);
+
+	scalar_butterfly(&w0i, &w2i);
+	scalar_butterfly(&w1i, &w3i);
+	scalar_butterfly_with_negated_b(&w4i, &w6i);
 	scalar_butterfly_with_negated_b(&w5i, &w7i);
 
 	//printf("butterfly 2 scalar: \n");
@@ -418,12 +397,13 @@ static inline void scalar_fft8_soa(
 	 * 4x FFT2: butterfly
 	 */
 	scalar_butterfly(&w0r, &w1r);
-	scalar_butterfly(&w0i, &w1i);
 	scalar_butterfly(&w2r, &w3r);
-	scalar_butterfly_with_negated_b(&w2i, &w3i);
 	scalar_butterfly(&w4r, &w5r);
-	scalar_butterfly(&w4i, &w5i);
 	scalar_butterfly(&w6r, &w7r);
+
+	scalar_butterfly(&w0i, &w1i);
+	scalar_butterfly_with_negated_b(&w2i, &w3i);
+	scalar_butterfly(&w4i, &w5i);
 	scalar_butterfly_with_negated_b(&w6i, &w7i);
 
 	//printf("butterfly 3 scalar: \n");
