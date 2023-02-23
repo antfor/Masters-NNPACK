@@ -55,30 +55,33 @@ static inline void test_sve()
         vecprint(y, N);
 }
 
-static inline void butterfly_sve(uint32_t N, svfloat32_t *pwir, float32_t *indR, float32_t *indI){
+static inline void butterfly_sve(uint32_t BLOCK_SIZE, float32_t *wir, int32_t *indR, int32_t *indI){
 
 	svbool_t p1;
-	svfloat32_t wir = *pwir; 
-	uint32_t N_DIV_2 = N/2;
+	
+	svfloat32_t wrs, wre, wis, wie;
+	svint32_t svindRS, svindRE, svindIS, svindIE;
+
+	uint32_t N = BLOCK_SIZE/2;
 
 
-	uint64_t numVals = svlen_f32(wir);
+	uint64_t numVals = svlen(wrs);
 	for(uint32_t i=0; i < N; i+=numVals){
 		p1 = svwhilelt_b32_s32(i, N); 
 
 
-		const svfloat32_t svindRS = svld1(p1, &indR[i]);
-		const svfloat32_t wrs = svld1_gather_index_f32(p1,wir,svindRS);
+		svindRS = svld1(p1, &indR[i]);
+		wrs = svld1_gather_index(p1,wir,svindRS);
 
-		const svfloat32_t svindRE = svld1(p1, &indR[i + N_DIV_2]);
-		const svfloat32_t wre = svld1_gather_index_f32(p1,wir,svindRE);
+		svindRE = svld1(p1, &indR[i + N]);
+		wre = svld1_gather_index(p1,wir,svindRE);
 	
 	
-		const svfloat32_t svindIS = svld1(p1, &indI[i]);
-		const svfloat32_t wis = svld1_gather_index_f32(p1,wir,svindIS);
+		svindIS = svld1(p1, &indI[i]);
+		wis = svld1_gather_index(p1,wir,svindIS);
 
-		const svfloat32_t svindIE = svld1(p1, &indI[i + N_DIV_2]);
-		const svfloat32_t wie = svld1_gather_index_f32(p1,wir,svindIE);
+		svindIE = svld1(p1, &indI[i + N]);
+		wie = svld1_gather_index(p1,wir,svindIE);
 
 
 		svst1_scatter_index(p1, wir, svindRS, svadd_f32_m(p1, wrs, wre));
@@ -90,235 +93,79 @@ static inline void butterfly_sve(uint32_t N, svfloat32_t *pwir, float32_t *indR,
 	}
 }
 
-static inline void twiddlefactor_sve(uint32_t N, svfloat32_t *pwir, float32_t *ind, int conjugate){
+static inline void twiddle_sve(uint32_t BLOCK_SIZE, float32_t *wir, int32_t *ind, float32_t *twf){
 
 
-	float32_t twIR[8] = {SIN_0PI_OVER_2, COS_0PI_OVER_2,SIN_1PI_OVER_2,COS_1PI_OVER_2 ,SIN_0PI_OVER_2,COS_0PI_OVER_2 ,SIN_1PI_OVER_2,COS_1PI_OVER_2};
-	uint32_t N_DIV_2 = N/2;
+	uint32_t N = BLOCK_SIZE;
 
-	svfloat32_t wir = *pwir;
-	svfloat23_t tmp_wir;
+	svfloat32_t tmp_wir, cirD, wirD;
+	svint32_t svind;
 	svbool_t p1;
 
-	//svint32_t rot = conjugate ? 270 : 90;
-	svint32_t rot = 270;
-	uint64_t numVals = svlen_f32(wir);
+	uint64_t numVals = svlen(tmp_wir);
 
 	for(uint32_t  i=0; i < N; i+=numVals){ // i needs to be even ?
 		p1 = svwhilelt_b32_s32(i, N); 
 
-		const svfloat32_t svind = svld1(p1, &ind[i]);
-		const svfloat32_t wirD = svld1_gather_index_f32(p1, wir, svind);
-		const svfloat32_t cirD = svld1(p1,&twIR[i]);
+		svind = svld1(p1, &ind[i]);
+		wirD = svld1_gather_index(p1, wir, svind);
+		cirD = svld1(p1,&twf[i]);
 
-		svcmla_m(p1,tmp_wir , wirD, cirD, 0);
-		svcmla_m(p1,tmp_wir , wirD, cirD, rot); 
+		svcmla_m(p1,tmp_wir, cirD, wirD, 0);
+		svcmla_m(p1,tmp_wir, cirD, wirD, 270); 
 
 		svst1_scatter_index(p1, wir, svind, tmp_wir);
 	}
 }
 
-static inline void scalar_fft8_soa_new(
-	const float t[restrict static 16],
-	float f0r[restrict static 1],
-	float f1r[restrict static 1],
-	float f2r[restrict static 1],
-	float f3r[restrict static 1],
-	float f4r[restrict static 1],
-	float f5r[restrict static 1],
-	float f6r[restrict static 1],
-	float f7r[restrict static 1],
-	float f0i[restrict static 1],
-	float f1i[restrict static 1],
-	float f2i[restrict static 1],
-	float f3i[restrict static 1],
-	float f4i[restrict static 1],
-	float f5i[restrict static 1],
-	float f6i[restrict static 1],
-	float f7i[restrict static 1])
-{
-	printf("sve_fft8_soa\n");
-	//test_sve();
-	/* Load inputs and FFT8: butterfly */
-	 
-	/*old load
-	float w0r = t[0], w4r = t[4];
-	float w1r = t[1], w5r = t[5];
-	float w2r = t[2], w6r = t[6];
-	float w3r = t[3], w7r = t[7];
+static inline void load_wir_8(const float t[restrict static 16],float32_t *wir){
 
-	float w0i = t[8], w4i = t[12];
-	float w1i = t[9], w5i = t[13];
-	float w2i = t[10], w6i = t[14];
-	float w3i = t[11], w7i = t[15];
-	*/
+	svbool_t p1;
+	svfloat32_t wr, wi;
+	uint64_t numVals = svlen(wr);
+	uint32_t N = 16; 
+	uint32_t N_DIV_2 = N/2;
 
-	uint32_t i;
-    svbool_t predicate;
-	uint32_t BLOCK_SIZE = 8;
-	uint32_t BLOCK_SIZE_DIV_2 = 4;
-	svfloat32_t wr0123; //todo make tuple
-	svfloat32_t wr4567; //todo make tuple
-	svfloat32_t wi0123; //todo make tuple
-	svfloat32_t wi4567; //todo make tuple
-
-	uint64_t numVals = svlen_f32(wr0123);
-	// load
-	for(i = 0; i < BLOCK_SIZE_DIV_2; i+=numVals){
-
-		predicate = svwhilelt_b32_s32(i, BLOCK_SIZE);       
-		wr0123 = svld1_f32(predicate, t + i);  
-		wr4567 = svld1_f32(predicate, t + i + BLOCK_SIZE_DIV_2);                          // ld1w for x
-        wi0123 = svld1_f32(predicate, t + i + BLOCK_SIZE + BLOCK_SIZE_DIV_2);             // ld1w for y
-        wi4567 = svld1_f32(predicate, t + i + BLOCK_SIZE + BLOCK_SIZE_DIV_2);
-	}
-
-	//old butterfly
-	/*
-	scalar_butterfly(&w0r, &w4r);
-	scalar_butterfly(&w1r, &w5r);
-	scalar_butterfly(&w2r, &w6r);
-	scalar_butterfly(&w3r, &w7r);
-
-	scalar_butterfly(&w0i, &w4i);
-	scalar_butterfly(&w1i, &w5i);
-	scalar_butterfly(&w2i, &w6i);
-	scalar_butterfly(&w3i, &w7i);
-	*/
-
-	svfloat32_t new_wr0123; //todo make tuple
-	svfloat32_t new_wr4567; 
-	svfloat32_t new_wi0123; //todo make tuple
-	svfloat32_t new_wi4567;
+	const svint32_t indR = svindex_s32(0,2);
+	const svint32_t indI = svindex_s32(1,2);
 	
-	// butterfly
-	for(i = 0; i < BLOCK_SIZE_DIV_2; i+=numVals){
-		predicate = svwhilelt_b32_s32(i, BLOCK_SIZE_DIV_2); 
+	for(uint32_t i=0; i < N; i+=numVals){
+		p1 = svwhilelt_b32_s32(i, N); 
 
-		new_wr0123 = svadd_f32_m(predicate, wr0123, wr4567);
-		new_wr4567 = svsub_f32_m(predicate, wr0123, wr4567);
-
-		new_wi0123 = svadd_f32_m(predicate, wi0123, wi4567);
-		new_wi4567 = svsub_f32_m(predicate, wi0123, wi4567);
 		
+		wr = svld1(p1, &t[i]);
+		wi = svld1(p1, &t[i + N_DIV_2]);
+
+		svst1_scatter_index(p1, wir, indR, wr);
+		svst1_scatter_index(p1, wir, indI, wi);
 	}
-
-	svbool_t p1,p2;
-	svfloat32_t wr;  
-	svfloat32_t wi;
-
-	//uint64_t numVals = svlen_f32(wr0123);
-	for(i=0; i < BLOCK_SIZE_DIV_2; i+=numVals){
-		p1 = svwhilelt_b32_s32(i, BLOCK_SIZE_DIV_2); 
-		//p2 = svwhilelt_b32_s32(i + BLOCK_SIZE_DIV_2, BLOCK_SIZE); 
-
-		const svfloat32_t wr0123 =  svld1(p1, &t[i]);
-		const svfloat32_t wr4567 =  svld1(p1, &t[i + BLOCK_SIZE_DIV_2]);
-
-		const svfloat32_t wi0123 =  svld1(p1, &t[i + BLOCK_SIZE]);
-		const svfloat32_t wi4567 =  svld1(p1, &t[i + BLOCK_SIZE_DIV_2 + BLOCK_SIZE]);
-
-		wr = svadd_f32_m(p1, wr0123, wr4567);
-		svst1_scatter_offset(p1, wr, BLOCK_SIZE_DIV_2 ,svsub_f32_m(p1, wr0123, wr4567));
-
-		wi = svadd_f32_m(p1, wi0123, wi4567);
-		svst1_scatter_offset(p1, wi, BLOCK_SIZE_DIV_2 ,svsub_f32_m(p1, wi0123, wi4567));
-	}
-
-	//twiddle
-
-	float32_t twIR[8] = {SIN_0PI_OVER_2, COS_0PI_OVER_2,SIN_1PI_OVER_2,COS_1PI_OVER_2 ,SIN_0PI_OVER_2,COS_0PI_OVER_2 ,SIN_1PI_OVER_2,COS_1PI_OVER_2};
-	svfloat32_t cir;
-
-	svfloat32_t tmpir = svdup_f32(0.0f);
-	svfloat32_t wir;
-	svint32_t indi, indr;
-	
-	for(i=0; i < BLOCK_SIZE; i+=numVals){ // i needs to be even ?
-		p1 = svwhilelt_b32_s32(i, BLOCK_SIZE); 
-		p2 = svwhilelt_b32_s32(i*2.0f, BLOCK_SIZE*2.0f); 
-
-		//load twiddle factors
-		cir = svld1(p1,&twIR[i]);
-
-		const svfloat32_t wi4567 = svld1_offset(p1, wi, BLOCK_SIZE_DIV_2);
-		indi = svindex_s32(0.0f,2.0f); 
-		svst1_scatter_index(p1, wir,indi, wi4567);
-
-		const svfloat32_t wr4567 = svld1_offset(p1, wr, BLOCK_SIZE_DIV_2);
-		indr = svindex_s32(1.0f,2.0f); 
-		svst1_scatter_index(p1, wir,indr, wr4567);
-		
-		 
-		svcmla_z(p2, tmpir, wir, cir, 0);
-		svcmla_z(p2, tmpir, wir, cir, 270);
-
-
-	}
-
-	/*
-	 * 2x FFT4: butterfly
-	 */
-	scalar_butterfly(&w0r, &w2r);
-	scalar_butterfly(&w1r, &w3r);
-	scalar_butterfly(&w4r, &w6r);
-	scalar_butterfly(&w5r, &w7r);
-
-	scalar_butterfly(&w0i, &w2i);
-	scalar_butterfly(&w1i, &w3i);
-	scalar_butterfly_with_negated_b(&w4i, &w6i);
-	scalar_butterfly_with_negated_b(&w5i, &w7i);
-
-	/*
-	 * 2x FFT4: multiplication by twiddle factors:
-	 *
-	 *   w3r, w3i = w3i, -w3r
-	 *   w7r, w7i = w7i, -w7r
-	 *
-	 * (negation of w3i and w7i is merged into the next butterfly)
-	 */
-	scalar_swap(&w3r, &w3i);
-	scalar_swap(&w7r, &w7i);
-
-	/*
-	 * 4x FFT2: butterfly
-	 */
-	scalar_butterfly(&w0r, &w1r);
-	scalar_butterfly(&w0i, &w1i);
-	scalar_butterfly(&w2r, &w3r);
-	scalar_butterfly_with_negated_b(&w2i, &w3i);
-	scalar_butterfly(&w4r, &w5r);
-	scalar_butterfly(&w4i, &w5i);
-	scalar_butterfly(&w6r, &w7r);
-	scalar_butterfly_with_negated_b(&w6i, &w7i);
-
-	/* Bit reversal */
-	scalar_swap(&w1r, &w4r);
-	scalar_swap(&w3r, &w6r);
-
-	scalar_swap(&w1i, &w4i);
-	scalar_swap(&w3i, &w6i);
-
-	*f0r = w0r;
-	*f0i = w0i;
-	*f1r = w1r;
-	*f1i = w1i;
-	*f2r = w2r;
-	*f2i = w2i;
-	*f3r = w3r;
-	*f3i = w3i;
-	*f4r = w4r;
-
-	*f4i = w4i;
-	*f5r = w5r;
-	*f5i = w5i;
-	*f6r = w6r;
-	*f6i = w6i;
-	*f7r = w7r;
-	*f7i = w7i;
 }
 
-static inline void scalar_fft8_soa_old(
+static inline void bit_reversal(uint32_t BLOCK_SIZE, float32_t *wir, int32_t *indR, int32_t *indI){
+
+	svbool_t p1;
+	svfloat32_t wr, wi;
+	svint32_t svindR, svindI;
+	uint64_t numVals = svlen(wr);
+	uint32_t N = BLOCK_SIZE;
+
+	for(uint32_t i =0; i < N; i+=numVals){
+		
+		p1 = svwhilelt_b32_s32(i, N); 
+		
+		svindR = svld1(p1, &indR[i]);
+		wr = svld1_gather_index(p1,wir,svindR);
+		
+
+		svindI = svld1(p1, &indI[i]);
+		wi = svld1_gather_index(p1,wir,svindI);
+
+		svst1(p1, wir + i, wr);
+		svst1(p1, wir + i + BLOCK_SIZE, wi);
+	}
+}
+
+static inline void scalar_fft8_soa_sve(
 	const float t[restrict static 16],
 	float f0r[restrict static 1],
 	float f1r[restrict static 1],
@@ -337,8 +184,145 @@ static inline void scalar_fft8_soa_old(
 	float f6i[restrict static 1],
 	float f7i[restrict static 1])
 {
-	printf("scalar_fft8_soa\n");
-	test_sve();
+
+	//printf("sve_fft8_soa\n");
+	//test_sve();
+	/* Load inputs */ 
+	float32_t wir[16] = {0.0f};
+	const uint32_t BLOCK_SIZE = 8;
+	load_wir_8(t, &wir[0]); 
+
+	printf("load sve: \n");
+	vecprint(&wir[0],16);
+
+	//printf("stage 1 \n");
+	{ /* butterfly and multiplication by twiddle factors */
+	
+		int32_t indR[8] = {0,2,4,6,8,10,12,14}; // 0,1,2,3,4,5,6,7
+		int32_t indI[8] = {1,3,5,7,9,11,13,15}; // 0,1,2,3,4,5,6,7
+		
+
+		butterfly_sve(BLOCK_SIZE, &wir[0], &indR[0], &indI[0]);
+
+
+		printf("butterfly 1 sve: \n");
+		vecprint(&wir[0],16);
+
+		//twiddle
+		float32_t twfri[8] = {COS_0PI_OVER_4, SIN_0PI_OVER_4,COS_1PI_OVER_4, SIN_1PI_OVER_4 ,COS_2PI_OVER_4, SIN_2PI_OVER_4, COS_3PI_OVER_4, SIN_3PI_OVER_4};
+		int32_t ind[8] = {8,9,10,11,12,13,14,15}; // 4,5,6,7 4,5,6,7
+	
+		twiddle_sve(BLOCK_SIZE, &wir[0], &ind[0], &twfri[0]);
+
+		printf("tw 1 sve: \n");
+		vecprint(&wir[0],16);
+	}
+	
+	//printf("stage 2 \n");
+	{ /* 2x FFT4: butterfly and multiplication by twiddle factors:*/
+		int32_t indR[8] = {0,2,8,10,4,6,12,14}; // 0,1,4,5,2,3,6,7
+		int32_t indI[8] = {1,3,9,11,5,7,13,15}; // 0,1,4,5,2,3,6,7
+		
+		butterfly_sve(BLOCK_SIZE, &wir[0], &indR[0], &indI[0]);
+
+		printf("butterfly 2 sve: \n");
+		vecprint(&wir[0],16);
+
+		//twiddle
+		float32_t twfri[8] = {COS_0PI_OVER_2, SIN_0PI_OVER_2,COS_1PI_OVER_2, SIN_1PI_OVER_2 ,COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2};
+		int32_t ind[8] = {2,3,6,7,12,13,14,15}; // 2,3,6,7 2,3,6,7
+		twiddle_sve(BLOCK_SIZE, &wir[0], &ind[0], &twfri[0]);
+
+		printf("tw 2 sve: \n");
+		vecprint(&wir[0],16);
+	}
+
+	//printf("stage 3 \n");
+	{ /* 4x FFT2: butterfly */
+		int32_t indR[8] = {0,8,4,12,2,10,6,14}; // 0,4,2,6,1,5,3,7
+		int32_t indI[8] = {1,9,5,13,3,11,7,15}; // 0,4,2,6,1,5,3,7
+		
+
+		butterfly_sve(BLOCK_SIZE, &wir[0], &indR[0], &indI[0]);
+
+		printf("butterfly 3 sve: \n");
+		vecprint(&wir[0],16);
+
+		/*
+		* Bit reversal:
+		*   0  4  2  6  1  5  3  7
+		*   ^  ^  ^  ^  ^  ^  ^  ^
+		*   |  |  |  |  |  |  |  |
+		*   0  1  2  3  4  5  6  7
+		*  Store outputs 
+		*/
+	
+		//bit_reversal(BLOCK_SIZE, &wir[0], &indR[0], &indI[0]); // todo ta bort
+
+		printf("rev psmid: \n");
+		vecprint(&wir[0],16);
+		printf("\n\n\n");
+	}
+
+	//printf("stage 4 \n");
+	*f0r = wir[0];
+	*f1r = wir[2];
+	*f2r = wir[4];
+	*f3r = wir[6];
+	*f4r = wir[8];
+	*f5r = wir[10];
+	*f6r = wir[12];
+	*f7r = wir[14];
+
+	*f0i = wir[1];
+	*f1i = wir[3];
+	*f2i = wir[5];
+	*f3i = wir[7];
+	*f4i = wir[9];
+	*f5i = wir[11];
+	*f6i = wir[13];
+	*f7i = wir[15];
+	/*
+	*f0r = wir[0];
+	*f1r = wir[1];
+	*f2r = wir[2];
+	*f3r = wir[3];
+	*f4r = wir[4];
+	*f5r = wir[5];
+	*f6r = wir[6];
+	*f7r = wir[7];
+
+	*f0i = wir[8];
+	*f1i = wir[9];
+	*f2i = wir[10];
+	*f3i = wir[11];
+	*f4i = wir[12];
+	*f5i = wir[13];
+	*f6i = wir[14];
+	*f7i = wir[15];
+	*/
+}
+
+static inline void scalar_fft8_soa(
+	const float t[restrict static 16],
+	float f0r[restrict static 1],
+	float f1r[restrict static 1],
+	float f2r[restrict static 1],
+	float f3r[restrict static 1],
+	float f4r[restrict static 1],
+	float f5r[restrict static 1],
+	float f6r[restrict static 1],
+	float f7r[restrict static 1],
+	float f0i[restrict static 1],
+	float f1i[restrict static 1],
+	float f2i[restrict static 1],
+	float f3i[restrict static 1],
+	float f4i[restrict static 1],
+	float f5i[restrict static 1],
+	float f6i[restrict static 1],
+	float f7i[restrict static 1])
+{
+	//printf("scalar_fft8_soa\n");
 	//test_sve();
 	/* Load inputs and FFT8: butterfly */
 	float w0r = t[0], w4r = t[4];
