@@ -93,7 +93,7 @@ void nnp_fft8x8_with_offset__scalar(
 		float f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r;
 		float f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i;
 		//printf("scalar_fft8\n");
-		scalar_fft8_soa_sve(
+		scalar_fft8_soa(
 			&block[row][0],
 			&f0r, &f1r, &f2r, &f3r, &f4r, &f5r, &f6r, &f7r,
 			&f0i, &f1i, &f2i, &f3i, &f4i, &f5i, &f6i, &f7i);
