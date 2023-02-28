@@ -25,7 +25,7 @@ void svprint_f(svbool_t pg, svfloat32_t printme, const int n){
 }
 
 
-void nnp_cgemm_conjb_only_2x2__scalar(
+void nnp_cgemm_conjb_only_2x2__scalar_new_old(
 	size_t k, size_t update,
 	const float A[restrict static 1],
 	const float B[restrict static 1],
@@ -65,6 +65,7 @@ void nnp_cgemm_conjb_only_2x2__scalar(
 
 		b1r = svld1_gather_offset(p0, &B[4*i+2], ind);
 		b1i = svld1_gather_offset(p0, &B[4*i+3], ind);
+
 /*
 		int si = 8;
 		svprint_f(p0,a0r,si);
@@ -110,6 +111,88 @@ void nnp_cgemm_conjb_only_2x2__scalar(
 
 	float32_t acc11r = svaddv_f32(all_active, svAcc11r);
 	float32_t acc11i = svaddv_f32(all_active, svAcc11i);
+
+
+	if (update != 0) {
+		C[0] += acc00r;
+		C[1] += acc00i;
+		C[2] += acc01r;
+		C[3] += acc01i;
+		C += row_stride_c;
+		C[0] += acc10r;
+		C[1] += acc10i;
+		C[2] += acc11r;
+		C[3] += acc11i;
+	} else {
+		C[0] = acc00r;
+		C[1] = acc00i;
+		C[2] = acc01r;
+		C[3] = acc01i;
+		C += row_stride_c;
+		C[0] = acc10r;
+		C[1] = acc10i;
+		C[2] = acc11r;
+		C[3] = acc11i;
+	}
+
+}
+
+
+void nnp_cgemm_conjb_only_2x2__scalar(
+	size_t k, size_t update,
+	const float A[restrict static 1],
+	const float B[restrict static 1],
+	float C[restrict static 1],
+	size_t row_stride_c)
+{
+
+	svfloat32_t svAcc00, svAcc01,svAcc10,svAcc11;
+	svfloat32_t a0,a1,b0,b1;
+	svbool_t p0;
+
+	const svbool_t r_active = svdupq_b32(1,0,1,0);
+	const svbool_t i_active = svdupq_b32(1,0,1,0);
+	const svint32_t ind =svzip1(svindex_s32(0,4*4),svindex_s32(1,4*4));
+
+	uint64_t numVals = svlen(svAcc00);
+
+	for(uint32_t i = 0; i < k; i +=numVals){
+	
+		p0 = svwhilelt_b32_s32(i*4 + 0, k*4);
+
+
+		a0 = svld1_gather_offset(p0, &A[4*i+0], ind);
+		a1 = svld1_gather_offset(p0, &A[4*i+1], ind);
+		
+		b0 = svld1_gather_offset(p0, &B[4*i+0], ind);
+		b1 = svld1_gather_offset(p0, &B[4*i+1], ind);
+
+
+		svAcc00 = svcmla_m(p0,svAcc00, b0, a0, 0);
+		svAcc00 = svcmla_m(p0,svAcc00, b0, a0, 270); 
+
+		svAcc01 = svcmla_m(p0,svAcc01, b1, a0, 0);
+		svAcc01 = svcmla_m(p0,svAcc01, b1, a0, 270); 
+
+		svAcc10 = svcmla_m(p0,svAcc10, b0, a1, 0);
+		svAcc10 = svcmla_m(p0,svAcc10, b0, a1, 270); 
+
+		svAcc11 = svcmla_m(p0,svAcc11, b1, a1, 0);
+		svAcc11 = svcmla_m(p0,svAcc11, b1, a1, 270); 
+
+	}
+
+	float32_t acc00r = svaddv_f32(r_active, svAcc00);
+	float32_t acc00i = svaddv_f32(i_active, svAcc00);
+
+	float32_t acc01r = svaddv_f32(r_active, svAcc01);
+	float32_t acc01i = svaddv_f32(i_active, svAcc01);
+
+	float32_t acc10r = svaddv_f32(r_active, svAcc10);
+	float32_t acc10i = svaddv_f32(i_active, svAcc10);
+
+	float32_t acc11r = svaddv_f32(r_active, svAcc11);
+	float32_t acc11i = svaddv_f32(i_active, svAcc11);
 
 
 	if (update != 0) {
