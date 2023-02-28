@@ -313,7 +313,7 @@ int main2()
 	return 0;
 }
 
-void nnp_cgemm_conjb_upto_2x2__scalar(
+void nnp_cgemm_conjb_upto_2x2__scalar_old(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
 	const float a[restrict static 1],
@@ -413,4 +413,116 @@ void nnp_cgemm_conjb_upto_2x2__scalar(
 			}
 		}
 	}
+}
+
+
+void nnp_cgemm_conjb_upto_2x2__scalar(
+	uint32_t mr, uint32_t nr,
+	size_t k, size_t update,
+	const float A[restrict static 1],
+	const float B[restrict static 1],
+	float c[restrict static 1],
+	size_t row_stride_c)
+{
+	
+	svfloat32_t svAcc00, svAcc01,svAcc10,svAcc11;
+	svfloat32_t a0,a1,b0,b1;
+	svbool_t pa,pb;
+
+	const svbool_t all_active = svptrue_b32();
+	const svbool_t r_active = svdupq_b32(1,0,1,0);
+	const svbool_t i_active = svdupq_b32(0,1,0,1);
+
+	const int sizeA = 2 * mr;
+	const int sizeB = 2 * nr;
+
+	const svint32_t inda =svzip1(svindex_s32(0,sizeA*4),svindex_s32(1,sizeA*4));
+	const svint32_t indb =svzip1(svindex_s32(0,sizeB*4),svindex_s32(1,sizeB*4));
+
+	uint64_t numVals = svlen(svAcc00);
+
+	for(uint32_t i = 0; i < k; i +=numVals){
+	
+		pa = svwhilelt_b32_s32(sizeA * i, sizeA * k);
+		pb = svwhilelt_b32_s32(sizeB * i, sizeB * k);
+			
+
+
+		a0 = svld1_gather_offset(pa, &A[sizeA*i+0], inda);
+		if(mr > 1)
+			a1 = svld1_gather_offset(pa, &A[sizeA*i+1], inda);
+	
+		
+		b0 = svld1_gather_offset(pb, &B[sizeB*i+0], indb);
+		if(nr > 1)
+			b1 = svld1_gather_offset(pb, &B[sizeB*i+1], indb);
+
+		
+		svAcc00 = svcmla_m(all_active,svAcc00, b0, a0, 0);
+		svAcc00 = svcmla_m(all_active,svAcc00, b0, a0, 270); 
+
+
+		if(mr > 1) {
+
+			svAcc10 = svcmla_m(all_active,svAcc10, b0, a1, 0);
+			svAcc10 = svcmla_m(all_active,svAcc10, b0, a1, 270); 
+		}
+
+		if(nr > 1){
+			
+			svAcc01 = svcmla_m(all_active,svAcc01, b1, a0, 0);
+			svAcc01 = svcmla_m(all_active,svAcc01, b1, a0, 270); 
+
+			if(mr > 1) {
+				svAcc11 = svcmla_m(all_active,svAcc11, b1, a1, 0);
+				svAcc11 = svcmla_m(all_active,svAcc11, b1, a1, 270); 
+			}
+
+		}
+
+	}
+
+	if (update != 0)
+	{
+		c[0] += svaddv_f32(r_active, svAcc00);
+		c[1] += svaddv_f32(i_active, svAcc00);
+		if (nr > 1)
+		{
+			c[2] += svaddv_f32(r_active, svAcc01);
+			c[3] += svaddv_f32(i_active, svAcc01);
+		}
+		if (mr > 1)
+		{
+			c += row_stride_c;
+			c[0] += svaddv_f32(r_active, svAcc10);
+			c[1] += svaddv_f32(i_active, svAcc10);
+			if (nr > 1)
+			{
+				c[2] += svaddv_f32(r_active, svAcc11);
+				c[3] += svaddv_f32(i_active, svAcc11);
+			}
+		}
+	}
+	else
+	{
+		c[0] = svaddv_f32(r_active, svAcc00);
+		c[1] = svaddv_f32(i_active, svAcc00);
+		if (nr > 1)
+		{
+			c[2] = svaddv_f32(r_active, svAcc01);
+			c[3] = svaddv_f32(i_active, svAcc01);
+		}
+		if (mr > 1)
+		{
+			c += row_stride_c;
+			c[0] = svaddv_f32(r_active, svAcc10);
+			c[1] = svaddv_f32(i_active, svAcc10);
+			if (nr > 1)
+			{
+				c[2] = svaddv_f32(r_active, svAcc11);
+				c[3] = svaddv_f32(i_active, svAcc11);
+			}
+		}
+	}
+
 }
