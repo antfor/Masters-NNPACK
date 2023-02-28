@@ -46,29 +46,37 @@ void nnp_cgemm_conjb_only_2x2__scalar(
 	svAcc10i = svdup_f32(0.0f);
 	svAcc11i = svdup_f32(0.0f);
 	const svbool_t all_active = svptrue_b32();
-	const svint32_t ind = svindex_s32(0,4);
+	const svint32_t ind = svindex_s32(0,4*4);
 	uint64_t numVals = svlen(svAcc00r);
 
 	for(uint32_t i = 0; i < k; i +=numVals){
+	
 		p0 = svwhilelt_b32_s32(i*4 + 0, k*4);
-		p1 = svwhilelt_b32_s32(i*4 + 1, k*4);
-		p2 = svwhilelt_b32_s32(i*4 + 2, k*4);
-		p3 = svwhilelt_b32_s32(i*4 + 3, k*4);
 
 
-		a0r = svld1_gather_index(p0, &A[4*i+0], ind);
-		a0i = svld1_gather_index(p1, &A[4*i+1], ind);
+		a0r = svld1_gather_offset(p0, &A[4*i+0], ind);
+		a0i = svld1_gather_offset(p0, &A[4*i+1], ind);
 
-		a1r = svld1_gather_index(p2, &A[4*i+2], ind);
-		a1i = svld1_gather_index(p3, &A[4*i+3], ind);
+		a1r = svld1_gather_offset(p0, &A[4*i+2], ind);
+		a1i = svld1_gather_offset(p0, &A[4*i+3], ind);
 
-		b0r = svld1_gather_index(p0, &B[4*i+0], ind);
-		b0i = svld1_gather_index(p1, &B[4*i+1], ind);
+		b0r = svld1_gather_offset(p0, &B[4*i+0], ind);
+		b0i = svld1_gather_offset(p0, &B[4*i+1], ind);
 
-		b1r = svld1_gather_index(p2, &B[4*i+2], ind);
-		b1i = svld1_gather_index(p3, &B[4*i+3], ind);
+		b1r = svld1_gather_offset(p0, &B[4*i+2], ind);
+		b1i = svld1_gather_offset(p0, &B[4*i+3], ind);
+/*
+		int si = 8;
+		svprint_f(p0,a0r,si);
+		svprint_f(p0,a0i,si);
+		svprint_f(p0,a1r,si);
+		svprint_f(p0,a1i,si);
 
-
+		svprint_f(p0,b0r,si);
+		svprint_f(p0,b0i,si);
+		svprint_f(p0,b1r,si);
+		svprint_f(p0,b1i,si);
+*/
 		svAcc00r = svmad_m(p0, a0r, b0r, svAcc00r);
 		svAcc00r = svmad_m(p0, a0i, b0i, svAcc00r); 
 		svAcc00i = svmad_m(p0, a0i, b0r, svAcc00i);
@@ -205,15 +213,16 @@ void nnp_cgemm_conjb_only_2x2__scalar_old(
 
 int main2()
 {
+	const int k = 2;
 	float A[2*4] = {1, 2, 3, 4,1, 2, 3, 4};
 	float B[2*4] = {1, 2, 3, 4,1, 2, 3, 4};
 	float C[8] = {0, 0, 0, 0};
 
-	nnp_cgemm_conjb_only_2x2__scalar_old(2, 0, A, B, C, 4);
+	nnp_cgemm_conjb_only_2x2__scalar_old(k, 0, A, B, C, 4);
 	printf("new \n");
 	printf("r: %f %f %f %f \n", C[0], C[1], C[2], C[3]);
 	printf("i: %f %f %f %f \n", C[4], C[5], C[6], C[7]);
-	nnp_cgemm_conjb_only_2x2__scalar(2, 0, A, B, C, 4);
+	nnp_cgemm_conjb_only_2x2__scalar(k, 0, A, B, C, 4);
 	printf("old \n");
 	printf("r: %f %f %f %f \n", C[0], C[1], C[2], C[3]);
 	printf("i: %f %f %f %f \n", C[4], C[5], C[6], C[7]);
