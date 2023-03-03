@@ -14,7 +14,7 @@ static inline void scalar_fft8_real(
 	size_t stride_f)
 {
 	float w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i;
-	scalar_fft4_aos(t0, t4, stride_t, row_offset, row_count,
+	sve_fft4_aos(t0, t4, stride_t, row_offset, row_count,
 		&w0r, &w0i, &w1r, &w1i, &w2r, &w2i, &w3r, &w3i);
 
 	const float half = 0.5f;
@@ -152,7 +152,7 @@ static inline void scalar_ifft8_real(
 	const float w3r =  g1r + sqrt2_over2 * h1_plus;
 	const float w3i = -g1i + sqrt2_over2 * h1_minus;
 
-	scalar_ifft4_aos(
+	sve_ifft4_aos(
 		w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i,
 		t0, t4, stride_t);
 }
