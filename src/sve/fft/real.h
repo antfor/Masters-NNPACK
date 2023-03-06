@@ -223,7 +223,7 @@ static inline void scalar_ifft16_real(
 	const float w5r =  g3r + h3i * cos_3pi_over_8 + h3r * cos_1pi_over_8;
 	const float w5i = -g3i + h3r * cos_3pi_over_8 - h3i * cos_1pi_over_8;
 
-	scalar_ifft8_aos(
+	sve_ifft8_aos(
 		w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i,
 		t0, t8, stride_t);
 }

@@ -515,7 +515,7 @@ fft8_twiddle:;
 	*f7i = part2_w[15];
 }
 
-static inline void scalar_ifft8_aos(
+static inline void sve_ifft8_aos(
 	float w0r, float w0i, float w1r, float w1i, float w2r, float w2i, float w3r, float w3i,
 	float w4r, float w4i, float w5r, float w5i, float w6r, float w6i, float w7r, float w7i,
 	float t_lo[restrict static 8],
@@ -523,22 +523,55 @@ static inline void scalar_ifft8_aos(
 	size_t stride_t)
 {
 	/* Bit reversal */
-	scalar_swap(&w1r, &w4r);
-	scalar_swap(&w1i, &w4i);
-	scalar_swap(&w3r, &w6r);
-	scalar_swap(&w3i, &w6i);
-
+	/* 4x IFFT2: butterfly */
 	/*
-	 * 4x IFFT2: butterfly
-	 */
-	scalar_butterfly(&w0r, &w1r);
-	scalar_butterfly(&w0i, &w1i);
-	scalar_butterfly(&w2r, &w3r);
-	scalar_butterfly(&w2i, &w3i);
-	scalar_butterfly(&w4r, &w5r);
-	scalar_butterfly(&w4i, &w5i);
-	scalar_butterfly(&w6r, &w7r);
-	scalar_butterfly(&w6i, &w7i);
+		w = [
+			0  w0r = 0 + 8
+			1  w0i = 1 + 9
+			2  w1r = 0 - 8
+			3  w1i = 1 - 9
+			4  w2r = 4 + 12
+			5  w2i = 5 + 13
+			6  w3r = 4 - 12
+			7  w3i = 5 - 13
+			8  w4r = 2 + 10
+			9  w4i = 3 + 11
+			10 w5r = 2 - 10
+			11 w5i = 3 - 11
+			12 w6r = 6 + 14
+			13 w6i = 7 + 15
+			14 w7r = 6 - 14
+			15 w7i = 7 - 15
+		]	
+	*/
+
+	float part1_w[16] = {0.0};
+	{
+		uint32_t indices_a[16] = {0, 1, 0, 1, 4, 5, 4, 5, 2, 3, 2, 3, 6, 7, 6, 7};
+		uint32_t indices_b[16] = {8, 9, 8, 9, 12, 13, 12, 13, 10, 11, 10, 11, 14, 15, 14, 15};
+		float mul_b[16] = {1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, -1.0f, -1.0f};
+		float old_w[16] = {w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i};
+
+		svbool_t pq;
+		svfloat32_t sv_a, sv_b;
+
+		uint64_t vector_len = svlen_f32(sv_a);
+		for(uint32_t  i=0; i < 16; i+=vector_len){
+			pq = svwhilelt_b32_s32(i, 16); 
+
+			svuint32_t sv_indexes_a = svld1(pq, indices_a + i * vector_len);
+			sv_a = svld1_gather_index(pq, old_w, sv_indexes_a);
+
+			svuint32_t sv_indexes_b = svld1(pq, indices_b + i * vector_len);
+			sv_b = svld1_gather_index(pq, old_w, sv_indexes_b);
+
+			svfloat32_t sv_mul_b = svld1(pq, mul_b + i * vector_len);
+			sv_b = svmul_f32_m(pq, sv_b, sv_mul_b);
+			
+			svfloat32_t sv_added = svadd_f32_m(pq, sv_a, sv_b);
+			svst1(pq, part1_w, sv_added);
+		}
+	}
 
 	/*
 	 * 2x IFFT4: multiplication by twiddle factors:
@@ -548,23 +581,58 @@ static inline void scalar_ifft8_aos(
 	 *
 	 * (negation of w3r and w7r is merged into the next butterfly)
 	 */
-	scalar_swap(&w3r, &w3i);
-	scalar_swap(&w7r, &w7i);
-
 	/*
 	 * 2x IFFT4: butterfly
 	 */
-	scalar_butterfly(&w0r, &w2r);
-	scalar_butterfly(&w0i, &w2i);
-	scalar_butterfly_with_negated_b(&w1r, &w3r);
-	scalar_butterfly(&w1i, &w3i);
-	scalar_butterfly(&w4r, &w6r);
-	scalar_butterfly(&w4i, &w6i);
-	scalar_butterfly_with_negated_b(&w5r, &w7r);
-	scalar_butterfly(&w5i, &w7i);
+	/*
+		w = [
+			0  w0r = 0 + 4
+			1  w0i = 1 + 5
+			2  w1r = 2 - 7
+			3  w1i = 3 + 6
+			4  w2r = 0 - 4
+			5  w2i = 1 - 5
+			6  w3r = 2 + 7
+			7  w3i = 3 - 6
+			8  w4r = 8 + 12
+			9  w4i = 9 + 13
+			10 w5r = 10 - 15
+			11 w5i = 11 + 14
+			12 w6r = 8 - 12
+			13 w6i = 9 - 13
+			14 w7r = 10 + 15
+			15 w7i = 11 - 14
+		]	
+	*/
+	float part2_w[16] = {0.0};
+	{
+		uint32_t indices_a[16] = {0, 1, 2, 3, 0, 1, 2, 3, 8, 9, 10, 11, 8, 9, 10, 11};
+		uint32_t indices_b[16] = {4, 5, 7, 6, 4, 5, 7, 6, 12, 13, 15, 14, 12, 13, 15, 14};
+		float mul_b[16] = {1.0f, 1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f};
+
+		svbool_t pq;
+		svfloat32_t sv_a, sv_b;
+
+		uint64_t vector_len = svlen_f32(sv_a);
+		for(uint32_t  i=0; i < 16; i+=vector_len){
+			pq = svwhilelt_b32_s32(i, 16); 
+
+			svuint32_t sv_indexes_a = svld1(pq, indices_a + i * vector_len);
+			sv_a = svld1_gather_index(pq, part1_w, sv_indexes_a);
+
+			svuint32_t sv_indexes_b = svld1(pq, indices_b + i * vector_len);
+			sv_b = svld1_gather_index(pq, part1_w, sv_indexes_b);
+
+			svfloat32_t sv_mul_b = svld1(pq, mul_b + i * vector_len);
+			sv_b = svmul_f32_m(pq, sv_b, sv_mul_b);
+			
+			svfloat32_t sv_added = svadd_f32_m(pq, sv_a, sv_b);
+			svst1(pq, part2_w, sv_added);
+		}
+	}
 
 	/*
-	 * IFFT8: multiplication by twiddle factors and scaling by 1/8:
+	 * IFFT8: multiplication by twiddle factors and scaling by 1/8: (scaling moved to part 3)
 	 *
 	 *   w5r, w5i =  sqrt(2)/2 (w5r - w5i), sqrt(2)/2 (w5r + w5i)
 	 *   w6r, w6i = -w6i, w6r
@@ -572,76 +640,99 @@ static inline void scalar_ifft8_aos(
 	 *
 	 * (negation of w6r and w7r is merged into the next butterfly)
 	 */
-	const float sqrt2_over_2 = SQRT2_OVER_2 * 0.125f;
-	const float new_w5r = sqrt2_over_2 * (w5r - w5i);
-	const float new_w5i = sqrt2_over_2 * (w5r + w5i);
-	const float minus_new_w7r = sqrt2_over_2 * (w7r + w7i);
-	const float new_w7i = sqrt2_over_2 * (w7r - w7i);
-	w5r = new_w5r;
-	w5i = new_w5i;
-	scalar_swap(&w6r, &w6i);
-	w7r = minus_new_w7r;
-	w7i = new_w7i;
+	const float sqrt2_over_2 = SQRT2_OVER_2;
+	const float new_w5r = sqrt2_over_2 * (part2_w[10] - part2_w[11]);
+	const float new_w5i = sqrt2_over_2 * (part2_w[10] + part2_w[11]);
+	const float minus_new_w7r = sqrt2_over_2 * (part2_w[14] + part2_w[15]);
+	const float new_w7i = sqrt2_over_2 * (part2_w[14] + part2_w[15]);
+	part2_w[10] = new_w5r;
+	part2_w[11] = new_w5i;
+	scalar_swap(&part2_w[12], &part2_w[13]);
+	part2_w[14] = minus_new_w7r;
+	part2_w[15] = new_w7i;
 
-	/* IFFT8: scaling of remaining coefficients by 1/8 */
-	const float scale = 0.125f;
-	w0r *= scale;
-	w0i *= scale;
-	w1r *= scale;
-	w1i *= scale;
-	w2r *= scale;
-	w2i *= scale;
-	w3r *= scale;
-	w3i *= scale;
-	w4r *= scale;
-	w4i *= scale;
-	w6r *= scale;
-	w6i *= scale;
-
-	/* IFFT8: butterfly and store outputs */
+	/* IFFT8: butterfly */
+	/*
 	scalar_butterfly(&w0r, &w4r);
-	*t_lo = w0r;
-	t_lo += stride_t;
-	*t_hi = w4r;
-	t_hi += stride_t;
-
 	scalar_butterfly(&w0i, &w4i);
-	*t_lo = w0i;
-	t_lo += stride_t;
-	*t_hi = w4i;
-	t_hi += stride_t;
-
 	scalar_butterfly(&w1r, &w5r);
-	*t_lo = w1r;
-	t_lo += stride_t;
-	*t_hi = w5r;
-	t_hi += stride_t;
-
 	scalar_butterfly(&w1i, &w5i);
-	*t_lo = w1i;
-	t_lo += stride_t;
-	*t_hi = w5i;
-	t_hi += stride_t;
-
 	scalar_butterfly_with_negated_b(&w2r, &w6r);
-	*t_lo = w2r;
-	t_lo += stride_t;
-	*t_hi = w6r;
-	t_hi += stride_t;
-
 	scalar_butterfly(&w2i, &w6i);
-	*t_lo = w2i;
-	t_lo += stride_t;
-	*t_hi = w6i;
-	t_hi += stride_t;
-
 	scalar_butterfly_with_negated_b(&w3r, &w7r);
-	*t_lo = w3r;
-	t_lo += stride_t;
-	*t_hi = w7r;
-	t_hi += stride_t;
-
 	scalar_butterfly(&w3i, &w7i);
-	*t_lo = w3i;
-	*t_hi = w7i;
+	*/
+	/*
+		w = [
+			0  w0r = 0 + 8,
+			1  w0i = 1 + 9,
+			2  w1r = 2 + 10,
+			3  w1i = 3 + 11,
+			4  w2r = 4 - 12,
+			5  w2i = 5 + 13,
+			6  w3r = 6 - 14,
+			7  w3i = 7 + 15,
+			8  w4r = 0 - 8,
+			9  w4i = 1 - 9,
+			10 w5r = 2 - 10,
+			11 w5i = 3 - 11,
+			12 w6r = 4 + 12,
+			13 w6i = 5 - 13,
+			14 w7r = 6 + 14,
+			15 w7i = 7 - 15,
+		]	
+	*/
+	float part3_w[16] = {0.0};
+	{
+		uint32_t indices_a[16] = {0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7};
+		uint32_t indices_b[16] = {8, 9, 10, 11, 12, 13, 14, 15, 8, 9, 10, 11, 12, 13, 14, 15};
+		float mul_b[16] = {1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f};
+
+		const float scale = 0.125f;
+		svfloat32_t sv_scale = svdup_f32(scale);
+
+		svbool_t pq;
+		svfloat32_t sv_a, sv_b;
+
+		uint64_t vector_len = svlen_f32(sv_a);
+		for(uint32_t  i=0; i < 16; i+=vector_len){
+			pq = svwhilelt_b32_s32(i, 16); 
+
+			svuint32_t sv_indexes_a = svld1(pq, indices_a + i * vector_len);
+			sv_a = svld1_gather_index(pq, part2_w, sv_indexes_a);
+
+			svuint32_t sv_indexes_b = svld1(pq, indices_b + i * vector_len);
+			sv_b = svld1_gather_index(pq, part2_w, sv_indexes_b);
+
+			svfloat32_t sv_mul_b = svld1(pq, mul_b + i * vector_len);
+			sv_b = svmul_f32_m(pq, sv_b, sv_mul_b);
+			
+			svfloat32_t sv_added = svadd_f32_m(pq, sv_a, sv_b);
+			svfloat32_t sv_scaled = svmul_f32_m(pq, sv_added, sv_scale);
+
+			svst1(pq, part3_w, sv_scaled);
+		}
+	}
+
+	// Store outputs
+	{
+		svint32_t offsets = svindex_s32(0, stride_t * sizeof(float));
+		uint64_t vector_len = svlen(offsets);
+
+		for(uint32_t  i=0; i < 8; i+=vector_len){
+			svbool_t pq = svwhilelt_b32_s32(i, 8); 
+			svfloat32_t w_low = svld1(pq, part3_w + i * vector_len);
+			svfloat32_t w_high = svld1(pq, part3_w + 8 + i * vector_len);
+			svst1_scatter_offset(pq, t_lo, offsets, w_low);
+			svst1_scatter_offset(pq, t_hi, offsets, w_high);
+			t_lo += stride_t * vector_len;
+			t_hi += stride_t * vector_len;
+		}
+	}
 }
+
+/* Opimization ideas:
+1. Use multiply and add instruction instead of mul and then add
+2. In some cases can avoid gather / scatter
+3. Possibly use negation instead of multiply in some cases?
+*/
