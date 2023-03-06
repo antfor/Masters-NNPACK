@@ -210,7 +210,7 @@ static inline void sve_ifft4_aos(
 	}
 }
 
-static inline void scalar_fft8_aos(
+static inline void sve_fft8_aos(
 	const float t_lo[restrict static 8],
 	const float t_hi[restrict static 8],
 	size_t stride_t,
@@ -389,14 +389,55 @@ fft8_twiddle:;
 	/*
 	 * 2x FFT4: butterfly
 	 */
-	scalar_butterfly(&w0r, &w2r);
-	scalar_butterfly(&w0i, &w2i);
-	scalar_butterfly(&w1r, &w3r);
-	scalar_butterfly(&w1i, &w3i);
-	scalar_butterfly(&w4r, &w6r);
-	scalar_butterfly_with_negated_b(&w4i, &w6i);
-	scalar_butterfly(&w5r, &w7r);
-	scalar_butterfly_with_negated_b(&w5i, &w7i);
+
+	/*
+		w = [
+			0 : 0 + 4,
+			1 : 1 + 5,
+			2 : 2 + 6,
+			3 : 3 + 7,
+			4 : 0 - 4,
+			5 : 1 - 5,
+			6 : 2 - 6,
+			7 : 3 - 7,
+			8 : 8 + 12,
+			9 : 9 - 13, 
+			10: 10 + 14,
+			11: 11 - 15,
+			12: 8 - 12,
+			13: 9 + 13,
+			14: 10 - 14,
+			15: 11 + 15,
+		]	
+	*/
+
+	float part1_w[16] = {0.0};
+	{
+		uint32_t indices_a[16] = {0, 1, 2, 3, 0, 1, 2, 3, 8, 9, 10, 11, 8, 9, 10, 11};
+		uint32_t indices_b[16] = {4, 5, 6, 7, 4, 5, 6, 7, 12, 13, 14, 15, 12, 13, 14, 15};
+		float mul_b[16] = {1.0f, 1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f};
+		float old_w[16] = {w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i};
+
+		svbool_t pq;
+		svfloat32_t sv_a, sv_b;
+
+		uint64_t vector_len = svlen_f32(sv_a);
+		for(uint32_t  i=0; i < 16; i+=vector_len){
+			pq = svwhilelt_b32_s32(i, 16); 
+
+			svuint32_t sv_indexes_a = svld1(pq, indices_a + i * vector_len);
+			sv_a = svld1_gather_index(pq, old_w, sv_indexes_a);
+
+			svuint32_t sv_indexes_b = svld1(pq, indices_b + i * vector_len);
+			sv_b = svld1_gather_index(pq, old_w, sv_indexes_b);
+
+			svfloat32_t sv_mul_b = svld1(pq, mul_b + i * vector_len);
+			sv_b = svmul_f32_m(pq, sv_b, sv_mul_b);
+			
+			svfloat32_t sv_added = svadd_f32_m(pq, sv_a, sv_b);
+			svst1(pq, part1_w, sv_added);
+		}
+	}
 
 	/*
 	 * 2x FFT4: multiplication by twiddle factors:
@@ -406,43 +447,72 @@ fft8_twiddle:;
 	 *
 	 * (negation of w3i and w7i is merged into the next butterfly)
 	 */
-	scalar_swap(&w3r, &w3i);
-	scalar_swap(&w7r, &w7i);
+	/* Bit reversal */
+	/* 4x FFT2: butterfly*/
 
 	/*
-	 * 4x FFT2: butterfly
-	 */
-	scalar_butterfly(&w0r, &w1r);
-	scalar_butterfly(&w0i, &w1i);
-	scalar_butterfly(&w2r, &w3r);
-	scalar_butterfly_with_negated_b(&w2i, &w3i);
-	scalar_butterfly(&w4r, &w5r);
-	scalar_butterfly(&w4i, &w5i);
-	scalar_butterfly(&w6r, &w7r);
-	scalar_butterfly_with_negated_b(&w6i, &w7i);
+		w = [
+			0  w0r = 0 + 2
+			1  w0i = 1 + 3
+			2  w1r = 8 + 10
+			3  w1i = 9 + 11
+			4  w2r = 4 + 7
+			5  w2i = 5 - 6
+			6  w3r = 12 + 15
+			7  w3i = 13 - 14
+			8  w4r = 0 - 2
+			9  w4i = 1 - 3
+			10 w5r = 8 - 10
+			11 w5i = 9 - 11
+			12 w6r = 4 - 7
+			13 w6i = 5 + 6
+			14 w7r = 12 - 15
+			15 w7i = 13 + 14
+		]	
+	*/
+	float part2_w[16] = {0.0};
+	{
+		uint32_t indices_a[16] = {0, 1, 8, 9, 4, 5, 12, 13, 0, 1, 8, 9, 4, 5, 12, 13};
+		uint32_t indices_b[16] = {2, 3, 10, 11, 7, 6, 15, 14, 2, 3, 10, 11, 7, 6, 15, 14};
+		float mul_b[16] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f};
 
-	/* Bit reversal */
-	scalar_swap(&w1r, &w4r);
-	scalar_swap(&w1i, &w4i);
-	scalar_swap(&w3r, &w6r);
-	scalar_swap(&w3i, &w6i);
+		svbool_t pq;
+		svfloat32_t sv_a, sv_b;
 
-	*f0r = w0r;
-	*f0i = w0i;
-	*f1r = w1r;
-	*f1i = w1i;
-	*f2r = w2r;
-	*f2i = w2i;
-	*f3r = w3r;
-	*f3i = w3i;
-	*f4r = w4r;
-	*f4i = w4i;
-	*f5r = w5r;
-	*f5i = w5i;
-	*f6r = w6r;
-	*f6i = w6i;
-	*f7r = w7r;
-	*f7i = w7i;
+		uint64_t vector_len = svlen_f32(sv_a);
+		for(uint32_t  i=0; i < 16; i+=vector_len){
+			pq = svwhilelt_b32_s32(i, 16); 
+
+			svuint32_t sv_indexes_a = svld1(pq, indices_a + i * vector_len);
+			sv_a = svld1_gather_index(pq, part1_w, sv_indexes_a);
+
+			svuint32_t sv_indexes_b = svld1(pq, indices_b + i * vector_len);
+			sv_b = svld1_gather_index(pq, part1_w, sv_indexes_b);
+
+			svfloat32_t sv_mul_b = svld1(pq, mul_b + i * vector_len);
+			sv_b = svmul_f32_m(pq, sv_b, sv_mul_b);
+			
+			svfloat32_t sv_added = svadd_f32_m(pq, sv_a, sv_b);
+			svst1(pq, part2_w, sv_added);
+		}
+	}
+
+	*f0r = part2_w[0];
+	*f0i = part2_w[1];
+	*f1r = part2_w[2];
+	*f1i = part2_w[3];
+	*f2r = part2_w[4];
+	*f2i = part2_w[5];
+	*f3r = part2_w[6];
+	*f3i = part2_w[7];
+	*f4r = part2_w[8];
+	*f4i = part2_w[9];
+	*f5r = part2_w[10];
+	*f5i = part2_w[11];
+	*f6r = part2_w[12];
+	*f6i = part2_w[13];
+	*f7r = part2_w[14];
+	*f7i = part2_w[15];
 }
 
 static inline void scalar_ifft8_aos(
