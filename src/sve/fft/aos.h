@@ -91,32 +91,31 @@ static inline void sve_fft4_aos(
 	}
 
 fft4_twiddle:
+	;
 	float new_w[8] = {0.0};
-	{
-		uint32_t indices_a[8] = {0, 1, 4, 5, 0, 1, 4, 5};
-		uint32_t indices_b[8] = {2, 3, 7, 6, 2, 3, 7, 6};
-		float mul_b[8] = {1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f};
-		float old_w[8] = {w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i};
+	uint32_t indices_a[8] = {0, 1, 4, 5, 0, 1, 4, 5};
+	uint32_t indices_b[8] = {2, 3, 7, 6, 2, 3, 7, 6};
+	float mul_b[8] = {1.0f, 1.0f, 1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f};
+	float old_w[8] = {w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i};
 
-		svbool_t pq;
-		svfloat32_t sv_a, sv_b;
+	svbool_t pq;
+	svfloat32_t sv_a, sv_b;
+	uint64_t vector_len = svlen_f32(sv_a);
 
-		uint64_t vector_len = svlen_f32(sv_a);
-		for(uint32_t  i=0; i < 8; i+=vector_len){
-			pq = svwhilelt_b32_s32(i, 8); 
+	for(uint32_t  i=0; i < 8; i+=vector_len){
+		pq = svwhilelt_b32_s32(i, 8); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i * vector_len);
-			sv_a = svld1_gather_index(pq, old_w, sv_indexes_a);
+		svuint32_t sv_indexes_a = svld1(pq, indices_a + i * vector_len);
+		sv_a = svld1_gather_index(pq, old_w, sv_indexes_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i * vector_len);
-			sv_b = svld1_gather_index(pq, old_w, sv_indexes_b);
+		svuint32_t sv_indexes_b = svld1(pq, indices_b + i * vector_len);
+		sv_b = svld1_gather_index(pq, old_w, sv_indexes_b);
 
-			svfloat32_t sv_mul_b = svld1(pq, mul_b + i * vector_len);
-			sv_b = svmul_f32_m(pq, sv_b, sv_mul_b);
+		svfloat32_t sv_mul_b = svld1(pq, mul_b + i * vector_len);
+		sv_b = svmul_f32_m(pq, sv_b, sv_mul_b);
 
-			svfloat32_t sv_added = svadd_f32_m(pq, sv_a, sv_b);
-			svst1(pq, new_w, sv_added);
-		}
+		svfloat32_t sv_added = svadd_f32_m(pq, sv_a, sv_b);
+		svst1(pq, new_w, sv_added);
 	}
 
 	*f0r = new_w[0];
