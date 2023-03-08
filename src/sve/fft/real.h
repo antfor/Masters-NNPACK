@@ -13,26 +13,25 @@ static inline void scalar_fft8_real(
 	float f[restrict static 1],
 	size_t stride_f)
 {
-	float w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i;
-	sve_fft4_aos(t0, t4, stride_t, row_offset, row_count,
-		&w0r, &w0i, &w1r, &w1i, &w2r, &w2i, &w3r, &w3i);
+	float w[8];
+	sve_fft4_aos(t0, t4, stride_t, row_offset, row_count, w);
 
 	const float half = 0.5f;
-	const float g1r = half * (w1r + w3r);
-	const float g1i = half * (w1i - w3i);
-	const float two_h1r = w1i + w3i;
-	const float two_h1i = w3r - w1r;
+	const float g1r = half * (w[2] + w[6]);
+	const float g1i = half * (w[3] - w[7]);
+	const float two_h1r = w[3] + w[7];
+	const float two_h1i = w[6] - w[2];
 
 	const float sqrt2_over_4 = SQRT2_OVER_4;
 	const float h1_plus  = sqrt2_over_4 * (two_h1i + two_h1r);
 	const float h1_minus = sqrt2_over_4 * (two_h1i - two_h1r);
 
-	const float f0 = w0r + w0i;
-	const float f4 = w0r - w0i;
+	const float f0 = w[0] + w[1];
+	const float f4 = w[0] - w[1];
 	const float f1r = g1r + h1_plus;
 	const float f1i = h1_minus + g1i;
-	const float f2r =  w2r;
-	const float f2i = -w2i;
+	const float f2r =  w[4];
+	const float f2i = -w[5];
 	const float f3r = g1r - h1_plus;
 	const float f3i = h1_minus - g1i;
 
@@ -55,24 +54,23 @@ static inline void scalar_fft16_real(
 	float f[restrict static 1],
 	size_t stride_f)
 {
-	float w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i;
-	sve_fft8_aos(t0, t8, stride_t, row_offset, row_count,
-		&w0r, &w0i, &w1r, &w1i, &w2r, &w2i, &w3r, &w3i, &w4r, &w4i, &w5r, &w5i, &w6r, &w6i, &w7r, &w7i);
+	float w[16];
+	sve_fft8_aos(t0, t8, stride_t, row_offset, row_count, w);
 
 	const float half = 0.5f;
-	const float g1r = half * (w1r + w7r);
-	const float g1i = half * (w1i - w7i);
-	const float g2r = half * (w2r + w6r);
-	const float g2i = half * (w2i - w6i);
-	const float g3r = half * (w3r + w5r);
-	const float g3i = half * (w3i - w5i);
+	const float g1r = half * (w[2] + w[14]);
+	const float g1i = half * (w[3] - w[15]);
+	const float g2r = half * (w[4] + w[12]);
+	const float g2i = half * (w[5] - w[13]);
+	const float g3r = half * (w[6] + w[10]);
+	const float g3i = half * (w[7] - w[11]);
 
-	const float two_h1r = w1i + w7i;
-	const float two_h1i = w7r - w1r;
-	const float two_h2r = w2i + w6i;
-	const float two_h2i = w6r - w2r;
-	const float two_h3r = w3i + w5i;
-	const float two_h3i = w5r - w3r;
+	const float two_h1r = w[3] + w[15];
+	const float two_h1i = w[14] - w[2];
+	const float two_h2r = w[5] + w[13];
+	const float two_h2i = w[12] - w[4];
+	const float two_h3r = w[7] + w[11];
+	const float two_h3i = w[10] - w[6];
 
 	const float sqrt2_over_4 = SQRT2_OVER_4;
 	const float h2_plus  = sqrt2_over_4 * (two_h2i + two_h2r);
@@ -81,16 +79,16 @@ static inline void scalar_fft16_real(
 	const float half_cos_1pi_over_8 = COS_1PI_OVER_8 * 0.5f;
 	const float half_cos_3pi_over_8 = COS_3PI_OVER_8 * 0.5f;
 
-	const float f0  =  w0r + w0i;
-	const float f8  =  w0r - w0i;
+	const float f0  =  w[0] + w[1];
+	const float f8  =  w[0] - w[1];
 	const float f1r =  g1r + two_h1r * half_cos_1pi_over_8 + two_h1i * half_cos_3pi_over_8;
 	const float f1i =  g1i + two_h1i * half_cos_1pi_over_8 - two_h1r * half_cos_3pi_over_8;
 	const float f2r =  g2r + h2_plus;
 	const float f2i =  h2_minus + g2i;
 	const float f3r =  g3r + two_h3r * half_cos_3pi_over_8 + two_h3i * half_cos_1pi_over_8;
 	const float f3i =  g3i + two_h3i * half_cos_3pi_over_8 - two_h3r * half_cos_1pi_over_8;
-	const float f4r =  w4r;
-	const float f4i = -w4i;
+	const float f4r =  w[8];
+	const float f4i = -w[9];
 	const float f5r =  g3r - two_h3r * half_cos_3pi_over_8 - two_h3i * half_cos_1pi_over_8;
 	const float f5i = -g3i + two_h3i * half_cos_3pi_over_8 - two_h3r * half_cos_1pi_over_8;
 	const float f6r =  g2r - h2_plus;
@@ -132,10 +130,12 @@ static inline void scalar_ifft8_real(
 	f3r *= scale;
 	f3i *= scale;
 
-	const float w0r =  f0 + f4;
-	const float w0i =  f0 - f4;
-	const float w2r =  f2r;
-	const float w2i = -f2i;
+	float w[8];
+
+	w[0] =  f0 + f4;
+	w[1] =  f0 - f4;
+	w[4] =  f2r;
+	w[5] = -f2i;
 
 	const float g1r = f1r + f3r;
 	const float g1i = f1i - f3i;
@@ -147,14 +147,12 @@ static inline void scalar_ifft8_real(
 	const float h1_minus = h1r - h1i;
 
 	const float sqrt2_over2 = SQRT2_OVER_2;
-	const float w1r =  g1r - sqrt2_over2 * h1_plus;
-	const float w1i =  g1i + sqrt2_over2 * h1_minus;
-	const float w3r =  g1r + sqrt2_over2 * h1_plus;
-	const float w3i = -g1i + sqrt2_over2 * h1_minus;
+	w[2] =  g1r - sqrt2_over2 * h1_plus;
+	w[3] =  g1i + sqrt2_over2 * h1_minus;
+	w[6] =  g1r + sqrt2_over2 * h1_plus;
+	w[7] = -g1i + sqrt2_over2 * h1_minus;
 
-	sve_ifft4_aos(
-		w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i,
-		t0, t4, stride_t);
+	sve_ifft4_aos(w, t0, t4, stride_t);
 }
 
 static inline void scalar_ifft16_real(
@@ -181,10 +179,12 @@ static inline void scalar_ifft16_real(
 	f7r *= scale;
 	f7i *= scale;
 
-	const float w0r =  f0 + f8;
-	const float w0i =  f0 - f8;
-	const float w4r =  f4r;
-	const float w4i = -f4i;
+	float w[16];
+
+	w[0] =  f0 + f8;
+	w[1] =  f0 - f8;
+	w[8] =  f4r;
+	w[9] = -f4i;
 
 	const float g2r = f2r + f6r;
 	const float g2i = f2i - f6i;
@@ -196,10 +196,10 @@ static inline void scalar_ifft16_real(
 	const float h2_minus = h2r - h2i;
 
 	const float sqrt2_over2 = SQRT2_OVER_2;
-	const float w2r =  g2r - sqrt2_over2 * h2_plus;
-	const float w2i =  g2i + sqrt2_over2 * h2_minus;
-	const float w6r =  g2r + sqrt2_over2 * h2_plus;
-	const float w6i = -g2i + sqrt2_over2 * h2_minus;
+	w[4] =  g2r - sqrt2_over2 * h2_plus;
+	w[5] =  g2i + sqrt2_over2 * h2_minus;
+	w[12] =  g2r + sqrt2_over2 * h2_plus;
+	w[13] = -g2i + sqrt2_over2 * h2_minus;
 
 	const float g1r = f1r + f7r;
 	const float g1i = f1i - f7i;
@@ -213,17 +213,15 @@ static inline void scalar_ifft16_real(
 
 	const float cos_1pi_over_8 = COS_1PI_OVER_8;
 	const float cos_3pi_over_8 = COS_3PI_OVER_8;
-	const float w1r =  g1r - h1i * cos_1pi_over_8 - h1r * cos_3pi_over_8;
-	const float w1i =  g1i + h1r * cos_1pi_over_8 - h1i * cos_3pi_over_8;
-	const float w7r =  g1r + h1i * cos_1pi_over_8 + h1r * cos_3pi_over_8;
-	const float w7i = -g1i + h1r * cos_1pi_over_8 - h1i * cos_3pi_over_8;
+	w[2] =  g1r - h1i * cos_1pi_over_8 - h1r * cos_3pi_over_8;
+	w[3] =  g1i + h1r * cos_1pi_over_8 - h1i * cos_3pi_over_8;
+	w[14] =  g1r + h1i * cos_1pi_over_8 + h1r * cos_3pi_over_8;
+	w[15] = -g1i + h1r * cos_1pi_over_8 - h1i * cos_3pi_over_8;
 
-	const float w3r =  g3r - h3i * cos_3pi_over_8 - h3r * cos_1pi_over_8;
-	const float w3i =  g3i + h3r * cos_3pi_over_8 - h3i * cos_1pi_over_8;
-	const float w5r =  g3r + h3i * cos_3pi_over_8 + h3r * cos_1pi_over_8;
-	const float w5i = -g3i + h3r * cos_3pi_over_8 - h3i * cos_1pi_over_8;
+	w[6] =  g3r - h3i * cos_3pi_over_8 - h3r * cos_1pi_over_8;
+	w[7] =  g3i + h3r * cos_3pi_over_8 - h3i * cos_1pi_over_8;
+	w[10] =  g3r + h3i * cos_3pi_over_8 + h3r * cos_1pi_over_8;
+	w[11] = -g3i + h3r * cos_3pi_over_8 - h3i * cos_1pi_over_8;
 
-	sve_ifft8_aos(
-		w0r, w0i, w1r, w1i, w2r, w2i, w3r, w3i, w4r, w4i, w5r, w5i, w6r, w6i, w7r, w7i,
-		t0, t8, stride_t);
+	sve_ifft8_aos(w, t0, t8, stride_t);
 }
