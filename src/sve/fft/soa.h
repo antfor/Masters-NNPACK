@@ -5,6 +5,15 @@
 #include <sve/fft/complex.h>
 
 
+static inline void sve_fft8_soa(
+	const float t[restrict static 16],
+	float f[restrict static 16])
+{
+
+	fft8(t,f);
+}
+
+
 static inline void scalar_fft8_soa(
 	const float t[restrict static 16],
 	float f0r[restrict static 1],

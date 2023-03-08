@@ -5,6 +5,33 @@
 #include <arm_sve.h>
 
 
+static inline void sve_fft8_dualreal(
+	const float seq[restrict static 16],
+	float xy[restrict static 16])
+{
+
+	float w[16] = {0.0f};
+	sve_fft8_soa(seq,w);
+
+	xy[0] = w[0];
+	xy[1] = w[8];
+	xy[2] = 0.5f * (w[1] + w[7]);
+	xy[3] = 0.5f * (w[9] + w[15]);
+	xy[4] = 0.5f * (w[2] + w[6]);
+	xy[5] = 0.5f * (w[10] + w[14]);
+	xy[6] = 0.5f * (w[3] + w[5]);
+	xy[7] = 0.5f * (w[11] + w[13]);
+
+	xy[8] = w[4];
+	xy[9] = w[12];
+	xy[10] = 0.5f * (w[9] - w[15]);
+	xy[11] = 0.5f * (w[7] - w[1]);
+	xy[12] = 0.5f * (w[10] - w[14]);
+	xy[13] = 0.5f * (w[6] - w[2]);
+	xy[14] = 0.5f * (w[11] - w[13]);
+	xy[15] = 0.5f * (w[5] - w[3]);
+}
+
 static inline void scalar_fft8_dualreal(
 	const float seq[restrict static 16],
 	float x0[restrict static 1],

@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 
-void nnp_cgemm_conjb_only_2x2__scalar(
+void nnp_cgemm_conjb_only_2x2__scalar_new(
 	size_t k, size_t update,
 	const float A[restrict static 1],
 	const float B[restrict static 1],
@@ -466,7 +466,7 @@ void nnp_cgemm_conjb_1x1__scalar(
 }
 
 
-void nnp_cgemm_conjb_only_2x2__scalar_new(
+void nnp_cgemm_conjb_only_2x2__scalar(
 	size_t k, size_t update,
 	const float A[restrict static 1],
 	const float B[restrict static 1],
