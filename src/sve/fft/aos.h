@@ -96,11 +96,11 @@ fft4_twiddle:
 	for(uint32_t  i=0; i < 8; i+=vector_len){
 		pq = svwhilelt_b32_s32(i, 8); 
 
-		svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-		sv_a = svld1_gather_index(pq, w, sv_indexes_a);
+		svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+		sv_a = svld1_gather_index(pq, w, sv_indices_a);
 
-		svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-		sv_b = svld1_gather_index(pq, w, sv_indexes_b);
+		svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+		sv_b = svld1_gather_index(pq, w, sv_indices_b);
 
 		svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 
@@ -134,11 +134,11 @@ static inline void sve_ifft4_aos(
 		for(uint32_t  i=0; i < 8; i+=vector_len){
 			svbool_t pq = svwhilelt_b32_s32(i, 8); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-			svfloat32_t sv_a = svld1_gather_index(pq, w, sv_indexes_a);
+			svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+			svfloat32_t sv_a = svld1_gather_index(pq, w, sv_indices_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-			svfloat32_t sv_b = svld1_gather_index(pq, w, sv_indexes_b);
+			svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+			svfloat32_t sv_b = svld1_gather_index(pq, w, sv_indices_b);
 
 			svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 
@@ -161,11 +161,11 @@ static inline void sve_ifft4_aos(
 		for(uint32_t  i=0; i < 8; i+=vector_len){
 			svbool_t pq = svwhilelt_b32_s32(i, 8); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-			svfloat32_t sv_a = svld1_gather_index(pq, part1_w, sv_indexes_a);
+			svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+			svfloat32_t sv_a = svld1_gather_index(pq, part1_w, sv_indices_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-			svfloat32_t sv_b = svld1_gather_index(pq, part1_w, sv_indexes_b);
+			svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+			svfloat32_t sv_b = svld1_gather_index(pq, part1_w, sv_indices_b);
 
 			svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 
@@ -390,11 +390,11 @@ fft8_twiddle:;
 		for(uint32_t  i=0; i < 16; i+=vector_len){
 			pq = svwhilelt_b32_s32(i, 16); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-			sv_a = svld1_gather_index(pq, w, sv_indexes_a);
+			svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+			sv_a = svld1_gather_index(pq, w, sv_indices_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-			sv_b = svld1_gather_index(pq, w, sv_indexes_b);
+			svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+			sv_b = svld1_gather_index(pq, w, sv_indices_b);
 
 			svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 			
@@ -448,11 +448,11 @@ fft8_twiddle:;
 		for(uint32_t  i=0; i < 16; i+=vector_len){
 			pq = svwhilelt_b32_s32(i, 16); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-			sv_a = svld1_gather_index(pq, part1_w, sv_indexes_a);
+			svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+			sv_a = svld1_gather_index(pq, part1_w, sv_indices_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-			sv_b = svld1_gather_index(pq, part1_w, sv_indexes_b);
+			svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+			sv_b = svld1_gather_index(pq, part1_w, sv_indices_b);
 
 			svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 			
@@ -505,11 +505,11 @@ static inline void sve_ifft8_aos(
 		for(uint32_t  i=0; i < 16; i+=vector_len){
 			pq = svwhilelt_b32_s32(i, 16); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-			sv_a = svld1_gather_index(pq, w, sv_indexes_a);
+			svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+			sv_a = svld1_gather_index(pq, w, sv_indices_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-			sv_b = svld1_gather_index(pq, w, sv_indexes_b);
+			svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+			sv_b = svld1_gather_index(pq, w, sv_indices_b);
 
 			svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 			
@@ -563,11 +563,11 @@ static inline void sve_ifft8_aos(
 		for(uint32_t  i=0; i < 16; i+=vector_len){
 			pq = svwhilelt_b32_s32(i, 16); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-			sv_a = svld1_gather_index(pq, part1_w, sv_indexes_a);
+			svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+			sv_a = svld1_gather_index(pq, part1_w, sv_indices_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-			sv_b = svld1_gather_index(pq, part1_w, sv_indexes_b);
+			svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+			sv_b = svld1_gather_index(pq, part1_w, sv_indices_b);
 
 			svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 			
@@ -644,11 +644,11 @@ static inline void sve_ifft8_aos(
 		for(uint32_t  i=0; i < 16; i+=vector_len){
 			pq = svwhilelt_b32_s32(i, 16); 
 
-			svuint32_t sv_indexes_a = svld1(pq, indices_a + i);
-			sv_a = svld1_gather_index(pq, part2_w, sv_indexes_a);
+			svuint32_t sv_indices_a = svld1(pq, indices_a + i);
+			sv_a = svld1_gather_index(pq, part2_w, sv_indices_a);
 
-			svuint32_t sv_indexes_b = svld1(pq, indices_b + i);
-			sv_b = svld1_gather_index(pq, part2_w, sv_indexes_b);
+			svuint32_t sv_indices_b = svld1(pq, indices_b + i);
+			sv_b = svld1_gather_index(pq, part2_w, sv_indices_b);
 
 			svfloat32_t sv_mul_b = svld1(pq, mul_b + i);
 
