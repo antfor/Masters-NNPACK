@@ -1,6 +1,6 @@
 #pragma once
 
-// #include <nnpack/fft-constants.h>
+#include <nnpack/fft-constants.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <arm_sve.h>
@@ -8,25 +8,6 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-///*
-#define SQRT2_OVER_2 0x1.6A09E6p-1f
-
-#define COS_0PI_OVER_4 1.0f
-#define COS_1PI_OVER_4 SQRT2_OVER_2
-#define COS_2PI_OVER_4 0.0f
-#define COS_3PI_OVER_4 -SQRT2_OVER_2
-
-#define COS_0PI_OVER_2 1.0f
-#define COS_1PI_OVER_2 0.0f
-
-#define SIN_0PI_OVER_4 0.0f
-#define SIN_1PI_OVER_4 SQRT2_OVER_2
-#define SIN_2PI_OVER_4 1.0f
-#define SIN_3PI_OVER_4 SQRT2_OVER_2
-
-#define SIN_0PI_OVER_2 0.0f
-#define SIN_1PI_OVER_2 1.0f
-// */
 
 static inline void svprint_f(svbool_t pg, svfloat32_t printme, const int n)
 {
