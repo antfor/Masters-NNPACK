@@ -217,11 +217,10 @@ static inline void fft8x8(
     const svuint32_t ind_even = index4(0, 1, 4, 5, 8);
     const svuint32_t ind_odd = index4(2, 3, 6, 7, 8);
     const svuint32_t ind_load = index8(0, 8, 1, 9, 2, 10, 3, 11, 16);
-    const svuint32_t ind_store = index8(0, 1, 2, 3, 4, 5, 6, 7, 16);
+    //const svuint32_t ind_store = index8(0, 1, 2, 3, 4, 5, 6, 7, 16);
 
-    
-    const svuint32_t offsets = index8(f_stride * 0 + 0, f_stride * 0 + 4, f_stride * 1 + 0, f_stride * 1 + 4, f_stride * 2 + 0, f_stride * 2 + 4, f_stride * 3 + 0, f_stride * 3 + 4  ,f_stride * BLOCK_SIZE);
-    // printf("start\n");
+    const svuint32_t offsets = index8(f_stride * 0 + 0, f_stride * 0 + 1, f_stride * 1 + 0, f_stride * 1 + 1, f_stride * 2 + 0, f_stride * 2 + 1, f_stride * 3 + 0, f_stride * 3 + 1,f_stride * BLOCK_SIZE);
+    //index8(f_stride * 0 + 0, f_stride * 0 + 1, f_stride * 1 + 0, f_stride * 1 + 4, f_stride * 2 + 0, f_stride * 2 + 4, f_stride * 3 + 0, f_stride * 3 + 4  ,f_stride * BLOCK_SIZE));
 
     for (uint32_t i = 0; i < LENGTH; i += numVals)
     {
@@ -232,58 +231,27 @@ static inline void fft8x8(
         a = svld1_gather_index(pg_load, t + i, ind_load);
         b = svld1_gather_index(pg_load, t + i + BLOCK_SIZE / 2, ind_load);
 
-        // printf("load\n");
-        // svprint_ui(pg, ind_load, 16);
-        // svprintf_f32(pg, a, numVals, BLOCK_SIZE);
-        // svprintf_f32(pg, b, numVals, BLOCK_SIZE);
-
         // stage1
-        // printf("stage 1\n");
         butterfly(&pg, &a, &b, &new_a, &new_b);
-
-        // svprintf_f32(pg, new_a, numVals, BLOCK_SIZE);
-        // svprintf_f32(pg, new_b, numVals, BLOCK_SIZE);
-
         cmul_twiddle(&pg, &new_b, &twiddle_1, &new_bt);
-
-        // svprintf_f32(pg, new_bt, numVals, BLOCK_SIZE);
-
         suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
 
-        // svprintf_f32(pg, a, numVals, BLOCK_SIZE);
-        // svprintf_f32(pg, b, numVals, BLOCK_SIZE);
-
         // stage2
-        // printf("stage 2\n");
         butterfly(&pg, &a, &b, &new_a, &new_b);
-
-        // svprintf_f32(pg, new_a, numVals, BLOCK_SIZE);
-        // svprintf_f32(pg, new_b, numVals, BLOCK_SIZE);
-
         cmul_twiddle(&pg, &new_b, &twiddle_2, &new_bt);
-
-        // svprintf_f32(pg, new_bt, numVals, BLOCK_SIZE);
-
         suffle(&pg, &new_a, &new_bt, &ind_even, &ind_odd, &ind_zip, &a, &b);
 
-        // svprintf_f32(pg, a, numVals, BLOCK_SIZE);
-        // svprintf_f32(pg, b, numVals, BLOCK_SIZE);
-
         // stage3
-        // printf("stage 3\n");
         butterfly(&pg, &a, &b, &new_a, &new_b);
-
-        // svprintf_f32(pg, new_a, numVals, BLOCK_SIZE);
-        // svprintf_f32(pg, new_b, numVals, BLOCK_SIZE);
 
         // store
         //svst1_scatter_index(pg_load, f + i, ind_store, new_a);
         //svst1_scatter_index(pg_load, f + i + BLOCK_SIZE, ind_store, new_b);
 
-        svst1_scatter_offset(pg_load, f + i/2*f_stride/4 + 0, offsets, new_a);
-        svst1_scatter_offset(pg_load, f + i/2*f_stride/4 + f_stride, offsets, new_b); //todo fel
+        svst1_scatter_index(pg_load, f + i/2*f_stride + 0, offsets, new_a);
+        svst1_scatter_index(pg_load, f + i/2*f_stride + f_stride * 4, offsets, new_b);
     }
-   // printf("end\n");
+   
 }
 
 //                      _1
