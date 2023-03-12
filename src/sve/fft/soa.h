@@ -22,7 +22,7 @@ static inline void sve_fft8x8_soa(
 }
 
 
-static inline void scalar_fft8_soa(
+static inline void scalar_fft8_soa_old(
 	const float t[restrict static 16],
 	float f0r[restrict static 1],
 	float f1r[restrict static 1],
@@ -64,7 +64,7 @@ static inline void scalar_fft8_soa(
 	*f7i = f[15];
 }
 
-static inline void scalar_fft8_soa_old(
+static inline void scalar_fft8_soa(
 	const float t[restrict static 16],
 	float f0r[restrict static 1],
 	float f1r[restrict static 1],

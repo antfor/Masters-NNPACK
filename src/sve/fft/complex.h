@@ -163,14 +163,11 @@ static inline svuint32_t index2(uint32_t a, uint32_t b, uint32_t step)
 
 static inline svuint32_t index4(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t step)
 {
-    // return svzip1(svzip1(svindex_u32(a, step), svindex_u32(c, step)), svzip1(svindex_u32(b, step), svindex_u32(d, step)));
     return svzip1(index2(a, c, step), index2(b, d, step));
 }
 
 static inline svuint32_t index8(uint32_t i0, uint32_t i1, uint32_t i2, uint32_t i3, uint32_t i4, uint32_t i5, uint32_t i6, uint32_t i7, uint32_t step)
 {
-    // 0426 1537
-    // return svzip1(svzip1(svzip1(svindex_u32(i0, step), svindex_u32(i4, step)), svzip1(svindex_u32(i2, step), svindex_u32(i6, step))),  svzip1(svzip1(svindex_u32(i1, step), svindex_u32(i5, step)), svzip1(svindex_u32(i3, step), svindex_u32(i7, step))));
     return svzip1(index4(i0, i2, i4, i6, step), index4(i1, i3, i5, i7, step));
 }
 
@@ -197,11 +194,12 @@ static inline void fft8x8(
     const svuint32_t ind_high = index4(4, 5, 6, 7, 8);
     const svuint32_t ind_even = index4(0, 1, 4, 5, 8);
     const svuint32_t ind_odd = index4(2, 3, 6, 7, 8);
-    const svuint32_t ind_load = index8(0, 8, 1, 9, 2, 10, 3, 11, 16);
-    //const svuint32_t ind_store = index8(0, 1, 2, 3, 4, 5, 6, 7, 16);
+    //const svuint32_t ind_load = index8(0, 8, 1, 9, 2, 10, 3, 11, 16);
+    const svuint32_t ind_load = index8(4*0,4*8,4*1,4*9,4*2,4*10,4*3,4*11,4*16);
 
-    const svuint32_t offsets = index8(f_stride * 0 + 0, f_stride * 0 + 1, f_stride * 1 + 0, f_stride * 1 + 1, f_stride * 2 + 0, f_stride * 2 + 1, f_stride * 3 + 0, f_stride * 3 + 1,f_stride * BLOCK_SIZE);
-    //index8(f_stride * 0 + 0, f_stride * 0 + 1, f_stride * 1 + 0, f_stride * 1 + 4, f_stride * 2 + 0, f_stride * 2 + 4, f_stride * 3 + 0, f_stride * 3 + 4  ,f_stride * BLOCK_SIZE));
+    //const svuint32_t offsets = index8(f_stride * 0 + 0, f_stride * 0 + 1, f_stride * 1 + 0, f_stride * 1 + 1, f_stride * 2 + 0, f_stride * 2 + 1, f_stride * 3 + 0, f_stride * 3 + 1,f_stride * BLOCK_SIZE);
+    const svuint32_t offsets = index8(4 * f_stride * 0 + 0, 4 * f_stride * 0 + 4, 4 * f_stride * 1 + 0, 4 * f_stride * 1 + 4, 4 * f_stride * 2 + 0, 4 * f_stride * 2 + 4, 4 * f_stride * 3 + 0, 4 * f_stride * 3 + 4  ,4 * f_stride * BLOCK_SIZE);
+    //const svuint32_t offsets = index8(f_stride * 0 + 0, f_stride * 0 + 1, f_stride * 1 + 0, f_stride * 1 + 4, f_stride * 2 + 0, f_stride * 2 + 4, f_stride * 3 + 0, f_stride * 3 + 4  ,f_stride * BLOCK_SIZE));
 
     for (uint32_t i = 0; i < LENGTH; i += numVals)
     {
@@ -209,8 +207,8 @@ static inline void fft8x8(
         pg = svwhilelt_b32_s32(i / 2, LENGTH / 2);
         pg_load = svzip1_b32(pg, pg); // svwhilelt_b32_s32(i, LENGTH);
 
-        a = svld1_gather_index(pg_load, t + i, ind_load);
-        b = svld1_gather_index(pg_load, t + i + BLOCK_SIZE / 2, ind_load);
+        a = svld1_gather_offset(pg_load, t + i, ind_load);
+        b = svld1_gather_offset(pg_load, t + i + BLOCK_SIZE / 2, ind_load);
 
         // stage1
         butterfly(&pg, &a, &b, &new_a, &new_b);
@@ -226,11 +224,8 @@ static inline void fft8x8(
         butterfly(&pg, &a, &b, &new_a, &new_b);
 
         // store
-        //svst1_scatter_index(pg_load, f + i, ind_store, new_a);
-        //svst1_scatter_index(pg_load, f + i + BLOCK_SIZE, ind_store, new_b);
-
-        svst1_scatter_index(pg_load, f + i/2*f_stride + 0, offsets, new_a);
-        svst1_scatter_index(pg_load, f + i/2*f_stride + f_stride * 4, offsets, new_b);
+        svst1_scatter_offset(pg_load, f + i/2*f_stride + 0, offsets, new_a);
+        svst1_scatter_offset(pg_load, f + i/2*f_stride + f_stride * 4, offsets, new_b);
     }
    
 }
