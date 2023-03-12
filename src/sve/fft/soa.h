@@ -13,6 +13,14 @@ static inline void sve_fft8_soa(
 	fft8(t,f);
 }
 
+static inline void sve_fft8x8_soa(
+	const float t[restrict static 16*4],
+	float f[restrict static 16*4],
+	size_t f_stride)
+{
+	fft8x8(t,f,f_stride);
+}
+
 
 static inline void scalar_fft8_soa(
 	const float t[restrict static 16],

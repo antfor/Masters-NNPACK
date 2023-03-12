@@ -1,12 +1,32 @@
 #pragma once
 
-#include <nnpack/fft-constants.h>
+// #include <nnpack/fft-constants.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <arm_sve.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <stdbool.h>
+
+///*
+#define SQRT2_OVER_2 0x1.6A09E6p-1f
+
+#define COS_0PI_OVER_4 1.0f
+#define COS_1PI_OVER_4 SQRT2_OVER_2
+#define COS_2PI_OVER_4 0.0f
+#define COS_3PI_OVER_4 -SQRT2_OVER_2
+
+#define COS_0PI_OVER_2 1.0f
+#define COS_1PI_OVER_2 0.0f
+
+#define SIN_0PI_OVER_4 0.0f
+#define SIN_1PI_OVER_4 SQRT2_OVER_2
+#define SIN_2PI_OVER_4 1.0f
+#define SIN_3PI_OVER_4 SQRT2_OVER_2
+
+#define SIN_0PI_OVER_2 0.0f
+#define SIN_1PI_OVER_2 1.0f
+// */
 
 static inline void svprint_f(svbool_t pg, svfloat32_t printme, const int n)
 {
@@ -21,7 +41,36 @@ static inline void svprint_f(svbool_t pg, svfloat32_t printme, const int n)
     printf("\n");
 }
 
+static inline void svprintf_f32(svbool_t pg, svfloat32_t printme, const int n, const int m)
+{
+
+    float32_t tmp[n];
+
+    svst1(pg, tmp, printme);
+    printf("svfloat start");
+    for (int i = 0; i < n; i += m)
+    {
+        printf("\n    ");
+        for (int j = 0; j < m; j++)
+            printf("%f ", tmp[i * m + j]);
+    }
+    printf("\n svfloat end \n");
+}
+
 static inline void svprint_i(svbool_t pg, svint32_t printme, const int n)
+{
+
+    int32_t tmp[n];
+
+    svst1(pg, tmp, printme);
+
+    for (int i = 0; i < n; i++)
+        printf("%d ", tmp[i]);
+
+    printf("\n");
+}
+
+static inline void svprint_ui(svbool_t pg, svuint32_t printme, const int n)
 {
 
     int32_t tmp[n];
@@ -61,7 +110,183 @@ static inline void fft8_empty(
     float f[restrict static 16])
 {
 }
+//
+static inline void fft8_min8(
+    const float t[restrict static 16],
+    float f[restrict static 16])
+{
+    svfloat32_t a, b;
+    svbool_t pg;
+    const uint64_t numVals = svcntw();
 
+    for (uint32_t i = 0; i < 8; i += numVals)
+    {
+
+        pg = svwhilelt_b32_s32(i, 8);
+        a = svld1(pg, t + i);
+        b = svld1(pg, t + i + 8);
+
+        svst1(pg, f + i, a);
+        svst1(pg, f + i + 8, b);
+    }
+}
+//
+static inline void fft8_min16(
+    const float t[restrict static 16],
+    float f[restrict static 16])
+{
+    svfloat32_t ba, ab;
+    svbool_t pg;
+    const uint64_t numVals = svcntw();
+
+    for (uint32_t i = 0; i < 16; i += numVals)
+    {
+
+        pg = svwhilelt_b32_s32(i, 16);
+        ba = svld1(pg, t + i);
+
+        svst1(pg, f + i, ba);
+    }
+}
+
+static inline void butterfly(svbool_t *pg, svfloat32_t *a, svfloat32_t *b, svfloat32_t *new_a, svfloat32_t *new_b)
+{
+    *new_a = svadd_m(*pg, *a, *b);
+    *new_b = svsub_m(*pg, *a, *b);
+}
+
+static inline void mul_twiddle(svbool_t *pg, svfloat32_t *br, svfloat32_t *bi, const svfloat32_t *tr, const svfloat32_t *ti, svfloat32_t *new_br, svfloat32_t *new_bi)
+{
+    *new_br = svadd_m(*pg, svmul_m(*pg, *tr, *br), svmul_m(*pg, *ti, *bi));
+    *new_bi = svsub_m(*pg, svmul_m(*pg, *tr, *bi), svmul_m(*pg, *ti, *br));
+}
+
+static inline void cmul_twiddle(svbool_t *pg, svfloat32_t *b, const svfloat32_t *t, svfloat32_t *new_b)
+{
+    *new_b = svdup_f32(0.0f);
+    *new_b = svcmla_m(*pg, *new_b, *t, *b, 0);
+    *new_b = svcmla_m(*pg, *new_b, *t, *b, 270);
+}
+
+static inline void suffle(svbool_t *pg, svfloat32_t *a, svfloat32_t *b, const svuint32_t *ind_a, const svuint32_t *ind_b, const svuint32_t *ind_zip, svfloat32_t *new_a, svfloat32_t *new_b)
+{
+
+    *new_a = svtbl(svzip1(svtbl(*a, *ind_a), svtbl(*b, *ind_a)), *ind_zip);
+    *new_b = svtbl(svzip1(svtbl(*a, *ind_b), svtbl(*b, *ind_b)), *ind_zip);
+}
+
+static inline svuint32_t index2(uint32_t a, uint32_t b, uint32_t step)
+{
+    return svzip1(svindex_u32(a, step), svindex_u32(b, step));
+}
+
+static inline svuint32_t index4(uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t step)
+{
+    // return svzip1(svzip1(svindex_u32(a, step), svindex_u32(c, step)), svzip1(svindex_u32(b, step), svindex_u32(d, step)));
+    return svzip1(index2(a, c, step), index2(b, d, step));
+}
+
+static inline svuint32_t index8(uint32_t i0, uint32_t i1, uint32_t i2, uint32_t i3, uint32_t i4, uint32_t i5, uint32_t i6, uint32_t i7, uint32_t step)
+{
+    // 0426 1537
+    // return svzip1(svzip1(svzip1(svindex_u32(i0, step), svindex_u32(i4, step)), svzip1(svindex_u32(i2, step), svindex_u32(i6, step))),  svzip1(svzip1(svindex_u32(i1, step), svindex_u32(i5, step)), svzip1(svindex_u32(i3, step), svindex_u32(i7, step))));
+    return svzip1(index4(i0, i2, i4, i6, step), index4(i1, i3, i5, i7, step));
+}
+
+//                      _256
+static inline void fft8x8(
+    const float t[restrict static 16 * 4],
+    float f[restrict static 16 * 4],
+    size_t f_stride)
+{
+
+    const uint32_t BLOCK_SIZE = 8;
+    const uint32_t LENGTH = BLOCK_SIZE * BLOCK_SIZE;
+
+    const svfloat32_t twiddle_1 = svzip1(svdupq_f32(COS_0PI_OVER_4, COS_1PI_OVER_4, COS_2PI_OVER_4, COS_3PI_OVER_4), svdupq_f32(SIN_0PI_OVER_4, SIN_1PI_OVER_4, SIN_2PI_OVER_4, SIN_3PI_OVER_4));
+    const svfloat32_t twiddle_2 = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
+
+    svbool_t pg, pg_load;
+    svfloat32_t b, a, new_b, new_a, twiddle, new_bt;
+
+    const uint64_t numVals = svcntw() * 2; // a and b
+
+    const svuint32_t ind_zip = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
+    const svuint32_t ind_low = index4(0, 1, 2, 3, 8);
+    const svuint32_t ind_high = index4(4, 5, 6, 7, 8);
+    const svuint32_t ind_even = index4(0, 1, 4, 5, 8);
+    const svuint32_t ind_odd = index4(2, 3, 6, 7, 8);
+    const svuint32_t ind_load = index8(0, 8, 1, 9, 2, 10, 3, 11, 16);
+    const svuint32_t ind_store = index8(0, 1, 2, 3, 4, 5, 6, 7, 16);
+
+    
+    const svuint32_t offsets = index8(f_stride * 0 + 0, f_stride * 0 + 4, f_stride * 1 + 0, f_stride * 1 + 4, f_stride * 2 + 0, f_stride * 2 + 4, f_stride * 3 + 0, f_stride * 3 + 4  ,f_stride * BLOCK_SIZE);
+    // printf("start\n");
+
+    for (uint32_t i = 0; i < LENGTH; i += numVals)
+    {
+
+        pg = svwhilelt_b32_s32(i / 2, LENGTH / 2);
+        pg_load = svzip1_b32(pg, pg); // svwhilelt_b32_s32(i, LENGTH);
+
+        a = svld1_gather_index(pg_load, t + i, ind_load);
+        b = svld1_gather_index(pg_load, t + i + BLOCK_SIZE / 2, ind_load);
+
+        // printf("load\n");
+        // svprint_ui(pg, ind_load, 16);
+        // svprintf_f32(pg, a, numVals, BLOCK_SIZE);
+        // svprintf_f32(pg, b, numVals, BLOCK_SIZE);
+
+        // stage1
+        // printf("stage 1\n");
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+
+        // svprintf_f32(pg, new_a, numVals, BLOCK_SIZE);
+        // svprintf_f32(pg, new_b, numVals, BLOCK_SIZE);
+
+        cmul_twiddle(&pg, &new_b, &twiddle_1, &new_bt);
+
+        // svprintf_f32(pg, new_bt, numVals, BLOCK_SIZE);
+
+        suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
+
+        // svprintf_f32(pg, a, numVals, BLOCK_SIZE);
+        // svprintf_f32(pg, b, numVals, BLOCK_SIZE);
+
+        // stage2
+        // printf("stage 2\n");
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+
+        // svprintf_f32(pg, new_a, numVals, BLOCK_SIZE);
+        // svprintf_f32(pg, new_b, numVals, BLOCK_SIZE);
+
+        cmul_twiddle(&pg, &new_b, &twiddle_2, &new_bt);
+
+        // svprintf_f32(pg, new_bt, numVals, BLOCK_SIZE);
+
+        suffle(&pg, &new_a, &new_bt, &ind_even, &ind_odd, &ind_zip, &a, &b);
+
+        // svprintf_f32(pg, a, numVals, BLOCK_SIZE);
+        // svprintf_f32(pg, b, numVals, BLOCK_SIZE);
+
+        // stage3
+        // printf("stage 3\n");
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+
+        // svprintf_f32(pg, new_a, numVals, BLOCK_SIZE);
+        // svprintf_f32(pg, new_b, numVals, BLOCK_SIZE);
+
+        // store
+        //svst1_scatter_index(pg_load, f + i, ind_store, new_a);
+        //svst1_scatter_index(pg_load, f + i + BLOCK_SIZE, ind_store, new_b);
+
+        svst1_scatter_offset(pg_load, f + i/2*f_stride/4 + 0, offsets, new_a);
+        svst1_scatter_offset(pg_load, f + i/2*f_stride/4 + f_stride, offsets, new_b); //todo fel
+    }
+   // printf("end\n");
+}
+
+//                      _1
 static inline void fft8(
     const float t[restrict static 16],
     float f[restrict static 16])
@@ -70,158 +295,93 @@ static inline void fft8(
     float twiddle_factors[16] = {COS_0PI_OVER_4, SIN_0PI_OVER_4, COS_1PI_OVER_4, SIN_1PI_OVER_4, COS_2PI_OVER_4, SIN_2PI_OVER_4, COS_3PI_OVER_4, SIN_3PI_OVER_4,
                                  COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2, COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2};
 
-    svbool_t pg,pg_load;
+    svbool_t pg, pg_load;
 
     svfloat32_t b, a, new_b, new_a, twiddle, new_bt;
-    svuint32_t ind_a,ind_b;
+    svuint32_t ind_a, ind_b;
 
     const uint64_t numVals = svcntw();
-   
-    uint32_t index_zip [8] = {0,2,4,6,1,3,5,7};
-    uint32_t index_low [4] = {0,1,2,3};
-    uint32_t index_high[4] = {4,5,6,7};
-    uint32_t index_even[4] = {0,1,4,5};
-    uint32_t index_odd [4] = {2,3,6,7};
+
+    // todo svdup no read
+    const uint32_t index_zip[8] = {0, 2, 4, 6, 1, 3, 5, 7};
+    const uint32_t index_low[4] = {0, 1, 2, 3};
+    const uint32_t index_high[4] = {4, 5, 6, 7};
+    const uint32_t index_even[4] = {0, 1, 4, 5};
+    const uint32_t index_odd[4] = {2, 3, 6, 7};
 
     new_bt = svdup_f32(0.0f);
-    //r: bbbb aaaa i: bbbb aaaa
-    // bbbb bbbb aaaa aaaa
-    //R 0,1,2,3 4,5,6,7
-    //I 0,1,2,3 4,5,6,7
-    
-    //numvals >= 8
+    // numvals >= 8
     for (uint32_t i = 0; i < 8; i += numVals)
     {
 
         pg = svwhilelt_b32_s32(i, 8);
-        pg_load = svwhilelt_b32_s32(i/2, 4);
+        pg_load = svwhilelt_b32_s32(i / 2, 4);
 
         // svld1_vnum
-        a = svzip1(svld1(pg_load, t + i/2),svld1(pg_load, t+ i/2 +8));       
-        b = svzip1(svld1(pg_load, t + i/2 +4),svld1(pg_load, t+ i/2 +8 +4));
+        a = svzip1(svld1(pg_load, t + i / 2), svld1(pg_load, t + i / 2 + 8));
+        b = svzip1(svld1(pg_load, t + i / 2 + 4), svld1(pg_load, t + i / 2 + 8 + 4));
+
+        //printf("load\n");
+        //svprint_f(pg, a, 8);
+        //svprint_f(pg, b, 8);
 
         new_a = svadd_m(pg, a, b);
         new_b = svsub_m(pg, a, b);
+
+        //printf("stage 1\n");
+        //svprint_f(pg, new_a, 8);
+        //svprint_f(pg, new_b, 8);
 
         twiddle = svld1(pg, twiddle_factors + i);
         new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 0);
         new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 270);
 
+        //svprint_f(pg, new_bt, 8);
 
         const svuint32_t ind_zip = svld1(pg, index_zip + i);
 
         ind_a = svld1(pg, index_low + i);
         ind_b = svld1(pg, index_high + i);
-        a = svtbl(svzip1(svtbl(new_a,ind_a),svtbl(new_bt,ind_a)), ind_zip);
-        b = svtbl(svzip1(svtbl(new_a,ind_b),svtbl(new_bt,ind_b)), ind_zip);
-        new_bt = svdup_f32(0.0f); 
+        a = svtbl(svzip1(svtbl(new_a, ind_a), svtbl(new_bt, ind_a)), ind_zip);
+        b = svtbl(svzip1(svtbl(new_a, ind_b), svtbl(new_bt, ind_b)), ind_zip);
+        new_bt = svdup_f32(0.0f);
 
+        //svprint_f(pg, a, 8);
+        //svprint_f(pg, b, 8);
 
+        //printf("stage 2\n");
         new_a = svadd_m(pg, a, b);
         new_b = svsub_m(pg, a, b);
 
-        twiddle = svld1(pg, twiddle_factors + i +8);
-        new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 0);
-        new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 270);
-
-        
-        ind_a = svld1(pg, index_even + i);
-        ind_b = svld1(pg, index_odd + i);
-        a = svtbl(svzip1(svtbl(new_a,ind_a),svtbl(new_bt,ind_a)), ind_zip);
-        b = svtbl(svzip1(svtbl(new_a,ind_b),svtbl(new_bt,ind_b)), ind_zip);
-
-        new_a = svadd_m(pg, a, b);
-        new_b = svsub_m(pg, a, b);
-
-
-        svst1(pg, f + i + 8, new_b);
-        svst1(pg, f + i, new_a);
-       
-    }
-
-}
-
-static inline void fft8_old(
-    const float t[restrict static 16],
-    float f[restrict static 16])
-{
-
-    float twiddle_factors[16] = {COS_0PI_OVER_4, SIN_0PI_OVER_4, COS_1PI_OVER_4, SIN_1PI_OVER_4, COS_2PI_OVER_4, SIN_2PI_OVER_4, COS_3PI_OVER_4, SIN_3PI_OVER_4,
-                                 COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2, COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2};
-
-    svbool_t pg;
-
-    svfloat32_t b, a, new_b, new_a, twiddle, new_bt;
-    svint32_t ind, ind_out;
-
-    const uint64_t numVals = svcntw();
-    float tmp[16] = {0.0f};
-
-    int offset0[8] = {0, 8, 1, 9, 2, 10, 3, 11};
-    int offset1[8] = {8, 9, 10, 11, 0, 1, 2, 3};
-    int offset2[8] = {8, 9, 12, 13, 0, 1, 4, 5};
-
-    new_bt = svdup_f32(0.0f);
-
-    for (uint32_t i = 0; i < 8; i += numVals)
-    {
-
-        pg = svwhilelt_b32_s32(i, 8);
-
-        ind = svld1(pg, offset0 + i);
-        a = svld1_gather_index(pg, t, ind);
-        b = svld1_gather_index(pg, t + 4, ind);
-
-        new_a = svadd_m(pg, a, b);
-        new_b = svsub_m(pg, a, b);
-
-        twiddle = svld1(pg, twiddle_factors + i);
-        new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 0);
-        new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 270);
-
-        svst1(pg, f + i, new_bt);
-        svst1(pg, f + i + 8, new_a);
-    }
-
-    new_bt = svdup_f32(0.0f);
-
-    for (uint32_t i = 0; i < 8; i += numVals)
-    {
-
-        pg = svwhilelt_b32_s32(i, 8);
-
-        ind = svld1(pg, offset1 + i);
-        a = svld1_gather_index(pg, f, ind);
-        b = svld1_gather_index(pg, f + 4, ind);
-
-        new_a = svadd_m(pg, a, b);
-        new_b = svsub_m(pg, a, b);
+        //svprint_f(pg, new_a, 8);
+        //svprint_f(pg, new_b, 8);
 
         twiddle = svld1(pg, twiddle_factors + i + 8);
         new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 0);
         new_bt = svcmla_m(pg, new_bt, twiddle, new_b, 270);
 
-        svst1(pg, tmp + i, new_bt);
-        svst1(pg, tmp + i + 8, new_a);
-    }
+        //svprint_f(pg, new_bt, 8);
 
-    for (uint32_t i = 0; i < 8; i += numVals)
-    {
+        ind_a = svld1(pg, index_even + i);
+        ind_b = svld1(pg, index_odd + i);
+        a = svtbl(svzip1(svtbl(new_a, ind_a), svtbl(new_bt, ind_a)), ind_zip);
+        b = svtbl(svzip1(svtbl(new_a, ind_b), svtbl(new_bt, ind_b)), ind_zip);
 
-        pg = svwhilelt_b32_s32(i, 8);
+        //svprint_f(pg, a, 8);
+        //svprint_f(pg, b, 8);
 
-        ind = svld1(pg, offset2 + i);
-        a = svld1_gather_index(pg, tmp, ind);
-        b = svld1_gather_index(pg, tmp + 2, ind);
-
+        //printf("stage 3\n");
         new_a = svadd_m(pg, a, b);
         new_b = svsub_m(pg, a, b);
+
+        //svprint_f(pg, new_a, 8);
+        //svprint_f(pg, new_b, 8);
 
         svst1(pg, f + i + 8, new_b);
         svst1(pg, f + i, new_a);
     }
+    //printf("done\n");
 }
-
 
 static inline void fft8_armComputeLib(
     const float t[restrict static 16],
@@ -315,9 +475,7 @@ static inline void fft8_armComputeLib(
 
     f[14] = svaddv(r_active, f7);
     f[15] = svaddv(i_active, f7);
-
 }
-
 
 inline static void fft16(
     const float t[restrict static 32],

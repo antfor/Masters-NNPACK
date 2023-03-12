@@ -16,7 +16,181 @@
 #define BLOCK_SIZE 8
 
 
+void print_transform(float *transform, size_t transform_stride) {
+	for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
+		for (uint32_t column = 0; column < BLOCK_SIZE /2; column++) {
+			printf("%f ", transform[0]);
+			printf("%f ", transform[1]);
+			transform += transform_stride;
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
 void nnp_fft8x8_with_offset__scalar(
+	const float data[restrict static 1],
+	float transform[restrict static 1],
+	size_t data_stride, size_t transform_stride,
+	uint32_t row_count, uint32_t column_count,
+	uint32_t row_offset, uint32_t column_offset)
+{
+
+	transform_stride /= sizeof(float); // todo remove
+
+	float block[BLOCK_SIZE][BLOCK_SIZE];
+	if (column_offset != 0) {
+		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
+			for (uint32_t column = 0; column < column_offset; column++) {
+				block[row][column] = 0.0f;
+			}
+		}
+	}
+
+	const uint32_t column_end = column_offset + column_count;
+	if (column_end != BLOCK_SIZE) {
+		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
+			for (uint32_t column = column_end; column < BLOCK_SIZE; column++) {
+				block[row][column] = 0.0f;
+			}
+		}
+	}
+
+	const float *restrict row0 = data;
+	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
+	float* restrict output = &block[0][column_offset];
+	for (uint32_t column = column_offset; column < column_end; column++) {
+		scalar_fft8_real(row0, row4, data_stride,
+			row_offset, row_count,
+			&block[0][column], BLOCK_SIZE);
+
+		row0 += 1;
+		row4 += 1;
+		output += 1;
+	}
+
+	//sve_fft8x8_soa(&block[0][0],transform,transform_stride);
+	float *start_start = transform;
+	{
+	//sve_fft8x8_soa(&block[0][0],transform,transform_stride);	
+	float f[16*4] = {0};
+		
+	sve_fft8x8_soa(&block[0][0],transform,transform_stride*4);
+	/*
+	
+	float *start = transform;
+	
+	start += transform_stride * 0;
+	int offset = 0;
+
+	for (uint32_t row = 0; row < BLOCK_SIZE; row += 2) {
+		//sve_fft8_soa(&block[row][0],f);
+
+		start[0] = f[0 + offset];
+		start[1] = f[1 + offset];
+		start += transform_stride;	
+		start[0] = f[2 + offset];
+		start[1] = f[3 + offset];
+		start += transform_stride;	
+		start[0] = f[4+ offset];
+		start[1] = f[5+ offset];
+		start += transform_stride;	
+		start[0] = f[6+ offset];
+		start[1] = f[7+ offset];
+		start += transform_stride;	
+		start[0] = f[8+ offset];
+		start[1] = f[9+ offset];
+		start += transform_stride;	
+		start[0] = f[10+ offset];
+		start[1] = f[11+ offset];
+		start += transform_stride;	
+		start[0] = f[12+ offset];
+		start[1] = f[13+ offset];
+		start += transform_stride;	
+		start[0] = f[14+ offset];
+		start[1] = f[15+ offset];
+		start += transform_stride;	
+
+		offset += 16;
+	}
+	*/
+	}
+
+	{
+		float x0, y0, x1r, y1r, x2r, y2r, x3r, y3r;
+		float x4, y4, x1i, y1i, x2i, y2i, x3i, y3i;
+
+		x0 = y0 = x1r = y1r = x2r = y2r = x3r = y3r = 420.0f;
+		x4 = y4 = x1i = y1i = x2i = y2i = x3i = y3i = 420.0f;
+		transform[0] =  420.0f;
+		transform[1] =  420.0f;
+
+		scalar_fft8_dualreal(
+			&block[0][0],
+			&x0, &y0, &x1r, &y1r, &x2r, &y2r, &x3r, &y3r,
+			&x4, &y4, &x1i, &y1i, &x2i, &y2i, &x3i, &y3i);
+
+		transform[0] = x0;
+		transform[1] = x4;
+		transform += transform_stride;	
+		transform[0] = y0;
+		transform[1] = y4;
+		transform += transform_stride;	
+		transform[0] = x1r;
+		transform[1] = x1i;
+		transform += transform_stride;	
+		transform[0] = y1r;
+		transform[1] = y1i;
+		transform += transform_stride;	
+		transform[0] = x2r;
+		transform[1] = x2i;
+		transform += transform_stride;	
+		transform[0] = y2r;
+		transform[1] = y2i;
+		transform += transform_stride;	
+		transform[0] = x3r;
+		transform[1] = x3i;
+		transform += transform_stride;	
+		transform[0] = y3r;
+		transform[1] = y3i;
+		transform += transform_stride;	
+	}
+
+		//
+//	print_transform(start_start,transform_stride);
+
+//	exit(0);
+/*
+	{
+
+	float *start = transform; 
+	float f[BLOCK_SIZE*BLOCK_SIZE] = {0};
+	float data[BLOCK_SIZE*BLOCK_SIZE] = {0};
+
+	for(int i = 0; i < BLOCK_SIZE; i+=2){
+		float *row0 = &block[i][0];
+		for(int j = 0; j < 16; j++){
+			data[i*16 + j] = row0[j];
+		}
+	}
+
+	sve_fft8x8_soa(data, f , transform_stride);
+
+	for(int i = BLOCK_SIZE *2; i < BLOCK_SIZE*4; i+=2){
+
+		transform[0] = f[i];
+		transform[1] = f[i+1];
+		transform += transform_stride;
+
+	}
+
+	}
+
+	*/
+}
+
+
+void nnp_fft8x8_with_offset__scalar_old(
 	const float data[restrict static 1],
 	float transform[restrict static 1],
 	size_t data_stride, size_t transform_stride,
