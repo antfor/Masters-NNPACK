@@ -6,31 +6,6 @@
 #include <stdbool.h>
 
 
-void svprint_f(svbool_t pg, svfloat32_t printme, const int n){
-
-	float32_t tmp[n];
-
-	svst1(pg, tmp, printme);
-
-	for(int i =0; i< n; i++)
-		printf("%f ", tmp[i]);
-
-	printf("\n");
-}
-
-void svprint_i(svbool_t pg, svint32_t printme, const int n){
-
-	int32_t tmp[n];
-
-	svst1(pg, tmp, printme);
-
-	for(int i =0; i< n; i++)
-		printf("%d ", tmp[i]);
-
-	printf("\n");
-}
-
-
 void nnp_cgemm_conjb_only_2x2__scalar_new(
 	size_t k, size_t update,
 	const float A[restrict static 1],
@@ -512,7 +487,6 @@ void nnp_cgemm_conjb_only_2x2__scalar(
 	const svbool_t r_active = svdupq_b32(1,0,1,0);
 	const svbool_t i_active = svdupq_b32(0,1,0,1);
 	
-	//const svint32_t ind = svindex_s32(0,4*4);
 	const svint32_t ind = svzip1(svindex_s32(0,4*4),svindex_s32(1*4,4*4));
 
 
@@ -580,24 +554,4 @@ void nnp_cgemm_conjb_only_2x2__scalar(
 		C[3] = acc11i;
 	}
 
-}
-
-
-int main2()
-{
-	const int k = 1;
-	float A[2*4] = {1, 2, 3, 4,1, 2, 3, 4};
-	float B[2*4] = {1, 2, 3, 4,1, 2, 3, 4};
-	float C[8] = {0, 0, 0, 0};
-
-	nnp_cgemm_conjb_1x1__scalar(k, 0, A, B, C, 4);
-	printf("new \n");
-	printf("r: %f %f %f %f \n", C[0], C[1], C[2], C[3]);
-	printf("i: %f %f %f %f \n", C[4], C[5], C[6], C[7]);
-	nnp_cgemm_conjb_upto_2x2__scalar_old(1,1,k, 0, A, B, C, 4);
-	printf("old \n");
-	printf("r: %f %f %f %f \n", C[0], C[1], C[2], C[3]);
-	printf("i: %f %f %f %f \n", C[4], C[5], C[6], C[7]);
-	// printf("Hello World\n");
-	return 0;
 }

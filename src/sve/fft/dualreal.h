@@ -5,6 +5,62 @@
 #include <arm_sve.h>
 
 
+static inline void sve_fft8x8_dualreal(float transform[restrict static 16], size_t transform_stride){
+
+	float w[16] = {0.0f};
+	size_t offset = 0;
+	
+	w[0] = transform[0 + offset];
+	w[0+8] = transform[1 + offset];
+	offset += transform_stride;
+	w[1] = transform[0 + offset];
+	w[1+8] = transform[1 + offset];
+	offset += transform_stride;
+	w[2] = transform[0 + offset];
+	w[2+8] = transform[1 + offset];
+	offset += transform_stride;
+	w[3] = transform[0 + offset];
+	w[3+8] = transform[1 + offset];
+	offset += transform_stride;
+	w[4] = transform[0 + offset];
+	w[4+8] = transform[1 + offset];
+	offset += transform_stride;
+	w[5] = transform[0 + offset];
+	w[5+8] = transform[1 + offset];
+	offset += transform_stride;
+	w[6] = transform[0 + offset];
+	w[6+8] = transform[1 + offset];
+	offset += transform_stride;
+	w[7] = transform[0 + offset];
+	w[7+8] = transform[1 + offset];
+	
+
+	transform[0] = w[0];
+	transform[1] = w[4];
+	transform += transform_stride;
+	transform[0] = w[8];
+	transform[1] = w[12];
+	transform += transform_stride;
+	transform[0] = 0.5f * (w[1] + w[7]);
+	transform[1] = 0.5f * (w[9] - w[15]);
+	transform += transform_stride;
+	transform[0] = 0.5f * (w[9] + w[15]);
+	transform[1] = 0.5f * (w[7] - w[1]);
+	transform += transform_stride;
+	transform[0] = 0.5f * (w[2] + w[6]);
+	transform[1] = 0.5f * (w[10] - w[14]);
+	transform += transform_stride;
+	transform[0] = 0.5f * (w[10] + w[14]);
+	transform[1] = 0.5f * (w[6] - w[2]);
+	transform += transform_stride;
+	transform[0] = 0.5f * (w[3] + w[5]);
+	transform[1] = 0.5f * (w[11] - w[13]);
+	transform += transform_stride;
+	transform[0] = 0.5f * (w[11] + w[13]);
+	transform[1] = 0.5f * (w[5] - w[3]);
+
+}
+
 static inline void scalar_fft8_dualreal(
 	const float seq[restrict static 16],
 	float x0[restrict static 1],
