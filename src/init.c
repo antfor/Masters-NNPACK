@@ -170,7 +170,7 @@ static pthread_once_t hwinfo_init_control = PTHREAD_ONCE_INIT;
 			[6] = nnp_shdotxf7__psimd,
 			[7] = nnp_shdotxf8__psimd,
 		};
-	#elif NNP_BACKEND_SCALAR
+	#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE
 		static const nnp_sdotxf_function sdotxf[8] = {
 			[0] = nnp_sdotxf1__scalar,
 			[1] = nnp_sdotxf2__scalar,
@@ -511,7 +511,7 @@ static void init_hwinfo(void) {
 #endif /* !NNP_INFERENCE_ONLY */
 			};
 			nnp_hwinfo.supported = cpuinfo_has_arm_neon();
-		#elif NNP_BACKEND_SCALAR
+		#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE
 			nnp_hwinfo.simd_width = 1;
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_store = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_stream = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;

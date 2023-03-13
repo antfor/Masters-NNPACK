@@ -1,116 +1,132 @@
 #include <stdint.h>
 #include <stddef.h>
-
-#include <psimd.h>
-
-#include <nnpack/activations.h>
-#include <nnpack/macros.h>
-#include <nnpack/utils.h>
+#include <arm_sve.h>
+#include <stdio.h>
 
 #include <sve/fft/real.h>
 #include <sve/fft/soa.h>
 #include <sve/fft/dualreal.h>
 
+#include <nnpack/utils.h>
+#include <nnpack/activations.h>
 
-union NNP_SIMD_ALIGN block8x8 {
-	float as_float[8][8];
-	psimd_f32 as_psimd_f32[8][2];
-};
+#include <stdlib.h> // todo remove
 
 
-void nnp_fft8x8_with_offset__psimd(
+#define BLOCK_SIZE 8
+
+
+void nnp_fft8x8_with_offset__scalar(
 	const float data[restrict static 1],
 	float transform[restrict static 1],
 	size_t data_stride, size_t transform_stride,
 	uint32_t row_count, uint32_t column_count,
 	uint32_t row_offset, uint32_t column_offset)
 {
-	const uint32_t simd_width = 4;
-	const uint32_t block_size = 8;
+	const uint32_t simd_width = 1;
 	transform_stride /= sizeof(float);
 
-	union block8x8 block;
-	if (column_count >= simd_width) {
-		const psimd_f32 zero = psimd_zero_f32();
-		float *restrict block_data = &block.as_float[0][0];
-		const uint32_t column_end = column_offset + column_count;
-		if (column_offset != 0 && column_end != block_size) {
-			for (uint32_t row = 0; row < block_size; row++) {
-				psimd_store_f32(block_data,              zero);
-				psimd_store_f32(block_data + simd_width, zero);
-				block_data += block_size;
-			}
-		} else {
-			if (column_offset != 0) {
-				for (uint32_t row = 0; row < block_size; row++) {
-					psimd_store_f32(block_data, zero);
-					block_data += block_size;
-				}
-			} else if (column_end != block_size) {
-				for (uint32_t row = 0; row < block_size; row++) {
-					psimd_store_f32(block_data + simd_width, zero);
-					block_data += block_size;
-				}
+	float block[BLOCK_SIZE][BLOCK_SIZE];
+	if (column_offset != 0) {
+		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
+			for (uint32_t column = 0; column < column_offset; column++) {
+				block[row][column] = 0.0f;
 			}
 		}
+	}
 
-		const float *restrict row0 = data;
-		const float *restrict row4 = data + doz(block_size / 2, row_offset) * data_stride;
-		float* restrict output = &block.as_float[0][column_offset];
-		do {
-			const uint32_t column_block = min(column_count, simd_width);
-			row0 += column_block;
-			row4 += column_block;
-			output += column_block;
-
-			psimd_fft8_real_f32(
-				row0 - simd_width, row4 - simd_width, data_stride, row_offset, row_count,
-				output - simd_width, block_size);
-
-			column_count -= column_block;
-		} while (column_count != 0);
-	} else {
-		const psimd_f32 zero = psimd_zero_f32();
-		float *restrict block_data = &block.as_float[0][0];
-		for (uint32_t row = 0; row < block_size; row++) {
-			psimd_store_f32(block_data,              zero);
-			psimd_store_f32(block_data + simd_width, zero);
-			block_data += block_size;
-		}
-
-		for (size_t row = 0; row < row_count; row++) {
-			for (size_t column = 0; column < column_count; column++) {
-				block.as_float[row_offset + row][column_offset + column] = data[row * data_stride + column];
+	const uint32_t column_end = column_offset + column_count;
+	if (column_end != BLOCK_SIZE) {
+		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
+			for (uint32_t column = column_end; column < BLOCK_SIZE; column++) {
+				block[row][column] = 0.0f;
 			}
 		}
-
-		const uint32_t column = min(column_offset, block_size - simd_width);
-		psimd_fft8_real_f32(
-			&block.as_float[row_offset][column], &block.as_float[max(row_offset, block_size / 2)][column],
-			block_size, row_offset, row_count,
-			&block.as_float[0][column], block_size);
 	}
 
-	psimd_fft8_dualreal_f32(
-		&block.as_psimd_f32[0][0], &block.as_psimd_f32[0][1],
-		&block.as_psimd_f32[1][0], &block.as_psimd_f32[1][1]);
-	for (size_t row = 2; row < block_size; row += 2) {
-		psimd_fft8_soa_f32(
-			&block.as_psimd_f32[row    ][0], &block.as_psimd_f32[row    ][1],
-			&block.as_psimd_f32[row + 1][0], &block.as_psimd_f32[row + 1][1]);
+	const float *restrict row0 = data;
+	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
+	float* restrict output = &block[0][column_offset];
+	for (uint32_t column = column_offset; column < column_end; column++) {
+		scalar_fft8_real(row0, row4, data_stride,
+			row_offset, row_count,
+			&block[0][column], BLOCK_SIZE);
+
+		row0 += 1;
+		row4 += 1;
+		output += 1;
 	}
 
-	for (size_t row = 0; row < block_size; row += 2) {
-		for (size_t column = 0; column < 2; column += 1) {
-			psimd_store_f32(transform,              block.as_psimd_f32[row][column]);
-			psimd_store_f32(transform + simd_width, block.as_psimd_f32[row + 1][column]);
-			transform += transform_stride;
-		}
+	{
+		float x0, y0, x1r, y1r, x2r, y2r, x3r, y3r;
+		float x4, y4, x1i, y1i, x2i, y2i, x3i, y3i;
+		scalar_fft8_dualreal(
+			&block[0][0],
+			&x0, &y0, &x1r, &y1r, &x2r, &y2r, &x3r, &y3r,
+			&x4, &y4, &x1i, &y1i, &x2i, &y2i, &x3i, &y3i);
+		transform[0] = x0;
+		transform[1] = x4;
+		transform += transform_stride;	
+		transform[0] = y0;
+		transform[1] = y4;
+		transform += transform_stride;	
+		transform[0] = x1r;
+		transform[1] = x1i;
+		transform += transform_stride;	
+		transform[0] = y1r;
+		transform[1] = y1i;
+		transform += transform_stride;	
+		transform[0] = x2r;
+		transform[1] = x2i;
+		transform += transform_stride;	
+		transform[0] = y2r;
+		transform[1] = y2i;
+		transform += transform_stride;	
+		transform[0] = x3r;
+		transform[1] = x3i;
+		transform += transform_stride;	
+		transform[0] = y3r;
+		transform[1] = y3i;
+		transform += transform_stride;	
 	}
+	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
+		float f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r;
+		float f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i;
+		//printf("scalar_fft8\n");
+		scalar_fft8_soa(
+			&block[row][0],
+			&f0r, &f1r, &f2r, &f3r, &f4r, &f5r, &f6r, &f7r,
+			&f0i, &f1i, &f2i, &f3i, &f4i, &f5i, &f6i, &f7i);
+		transform[0] = f0r;
+		transform[1] = f0i;
+		transform += transform_stride;	
+		transform[0] = f1r;
+		transform[1] = f1i;
+		transform += transform_stride;	
+		transform[0] = f2r;
+		transform[1] = f2i;
+		transform += transform_stride;	
+		transform[0] = f3r;
+		transform[1] = f3i;
+		transform += transform_stride;	
+		transform[0] = f4r;
+		transform[1] = f4i;
+		transform += transform_stride;	
+		transform[0] = f5r;
+		transform[1] = f5i;
+		transform += transform_stride;	
+		transform[0] = f6r;
+		transform[1] = f6i;
+		transform += transform_stride;	
+		transform[0] = f7r;
+		transform[1] = f7i;
+		transform += transform_stride;	
+	}
+	//exit(0); //todo remove
 }
 
 #if !NNP_INFERENCE_ONLY
-void nnp_ifft8x8_with_offset__psimd(
+void nnp_ifft8x8_with_offset__scalar(
 	const float transform[restrict static 1],
 	float data[restrict static 1],
 	size_t transform_stride, size_t data_stride,
@@ -119,45 +135,92 @@ void nnp_ifft8x8_with_offset__psimd(
 {
 	transform_stride /= sizeof(float);
 
-	union block8x8 block;
-	for (size_t row = 0; row < 8; row += 2) {
-		for (size_t column = 0; column < 2; column += 1) {
-			block.as_psimd_f32[row][column] = psimd_load_f32(transform + 0);
-			block.as_psimd_f32[row + 1][column] = psimd_load_f32(transform + 4);
-			transform += transform_stride;
-		}
+	float block[BLOCK_SIZE][BLOCK_SIZE];
+	{
+		const float x0 = transform[0];
+		const float x4 = transform[1];
+		transform += transform_stride;
+		const float y0 = transform[0];
+		const float y4 = transform[1];
+		transform += transform_stride;
+		const float x1r = transform[0];
+		const float x1i = transform[1];
+		transform += transform_stride;
+		const float y1r = transform[0];
+		const float y1i = transform[1];
+		transform += transform_stride;
+		const float x2r = transform[0];
+		const float x2i = transform[1];
+		transform += transform_stride;
+		const float y2r = transform[0];
+		const float y2i = transform[1];
+		transform += transform_stride;
+		const float x3r = transform[0];
+		const float x3i = transform[1];
+		transform += transform_stride;
+		const float y3r = transform[0];
+		const float y3i = transform[1];
+		transform += transform_stride;
+		scalar_ifft8_dualreal(
+			x0, y0, x1r, y1r, x2r, y2r, x3r, y3r,
+			x4, y4, x1i, y1i, x2i, y2i, x3i, y3i,
+			&block[0][0]);
+	}
+	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
+		const float f0r = transform[0];
+		const float f0i = transform[1];
+		transform += transform_stride;
+		const float f1r = transform[0];
+		const float f1i = transform[1];
+		transform += transform_stride;
+		const float f2r = transform[0];
+		const float f2i = transform[1];
+		transform += transform_stride;
+		const float f3r = transform[0];
+		const float f3i = transform[1];
+		transform += transform_stride;
+		const float f4r = transform[0];
+		const float f4i = transform[1];
+		transform += transform_stride;
+		const float f5r = transform[0];
+		const float f5i = transform[1];
+		transform += transform_stride;
+		const float f6r = transform[0];
+		const float f6i = transform[1];
+		transform += transform_stride;
+		const float f7r = transform[0];
+		const float f7i = transform[1];
+		transform += transform_stride;
+		scalar_ifft8_soa(
+			f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r,
+			f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i,
+			&block[row][0]);
 	}
 
-	psimd_ifft8_dualreal_f32(
-		&block.as_psimd_f32[0][0], &block.as_psimd_f32[0][1],
-		&block.as_psimd_f32[1][0], &block.as_psimd_f32[1][1]);
-	for (size_t row = 2; row < 8; row += 2) {
-		psimd_ifft8_soa_f32(
-			&block.as_psimd_f32[row    ][0], &block.as_psimd_f32[row    ][1],
-			&block.as_psimd_f32[row + 1][0], &block.as_psimd_f32[row + 1][1]);
+	for (uint32_t column = 0; column < BLOCK_SIZE; column++) {
+		const float f0  = block[0][column];
+		const float f4  = block[1][column];
+		const float f1r = block[2][column];
+		const float f1i = block[3][column];
+		const float f2r = block[4][column];
+		const float f2i = block[5][column];
+		const float f3r = block[6][column];
+		const float f3i = block[7][column];
+		scalar_ifft8_real(
+			f0, f4, f1r, f1i, f2r, f2i, f3r, f3i,
+			&block[0][column], &block[BLOCK_SIZE / 2][column],
+			BLOCK_SIZE);
 	}
 
-	psimd_ifft8_real_f32(
-		block.as_psimd_f32[0][0], block.as_psimd_f32[1][0], block.as_psimd_f32[2][0], block.as_psimd_f32[3][0],
-		block.as_psimd_f32[4][0], block.as_psimd_f32[5][0], block.as_psimd_f32[6][0], block.as_psimd_f32[7][0],
-		&block.as_float[0][0], &block.as_float[4][0], 8);
-	const uint32_t column_end = column_offset + column_count;
-	if (column_end > 4) {
-		psimd_ifft8_real_f32(
-			block.as_psimd_f32[0][1], block.as_psimd_f32[1][1], block.as_psimd_f32[2][1], block.as_psimd_f32[3][1],
-			block.as_psimd_f32[4][1], block.as_psimd_f32[5][1], block.as_psimd_f32[6][1], block.as_psimd_f32[7][1],
-			&block.as_float[0][4], &block.as_float[4][4], 8);
-	}
-
-	for (size_t row = 0; row < row_count; row++) {
-		for (size_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = block.as_float[row_offset + row][column_offset + column];
+	for (uint32_t row = 0; row < row_count; row++) {
+		for (uint32_t column = 0; column < column_count; column++) {
+			data[row * data_stride + column] = block[row_offset + row][column_offset + column];
 		}
 	}
 }
 #endif /* !NNP_INFERENCE_ONLY */
 
-void nnp_ifft8x8_with_bias__psimd(
+void nnp_ifft8x8_with_bias__scalar(
 	const float transform[restrict static 1],
 	float data[restrict static 1],
 	const float bias[restrict static 1],
@@ -166,45 +229,93 @@ void nnp_ifft8x8_with_bias__psimd(
 {
 	transform_stride /= sizeof(float);
 
-	union block8x8 block;
-	for (size_t row = 0; row < 8; row += 2) {
-		for (size_t column = 0; column < 2; column += 1) {
-			block.as_psimd_f32[row][column] = psimd_load_f32(transform + 0);
-			block.as_psimd_f32[row + 1][column] = psimd_load_f32(transform + 4);
-			transform += transform_stride;
-		}
+	float block[BLOCK_SIZE][BLOCK_SIZE];
+
+	const float bias_value = *bias;
+	{
+		const float x0 = transform[0] + bias_value * 64.0f;
+		const float x4 = transform[1];
+		transform += transform_stride;
+		const float y0 = transform[0];
+		const float y4 = transform[1];
+		transform += transform_stride;
+		const float x1r = transform[0];
+		const float x1i = transform[1];
+		transform += transform_stride;
+		const float y1r = transform[0];
+		const float y1i = transform[1];
+		transform += transform_stride;
+		const float x2r = transform[0];
+		const float x2i = transform[1];
+		transform += transform_stride;
+		const float y2r = transform[0];
+		const float y2i = transform[1];
+		transform += transform_stride;
+		const float x3r = transform[0];
+		const float x3i = transform[1];
+		transform += transform_stride;
+		const float y3r = transform[0];
+		const float y3i = transform[1];
+		transform += transform_stride;
+		scalar_ifft8_dualreal(
+			x0, y0, x1r, y1r, x2r, y2r, x3r, y3r,
+			x4, y4, x1i, y1i, x2i, y2i, x3i, y3i,
+			&block[0][0]);
+	}
+	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
+		const float f0r = transform[0];
+		const float f0i = transform[1];
+		transform += transform_stride;
+		const float f1r = transform[0];
+		const float f1i = transform[1];
+		transform += transform_stride;
+		const float f2r = transform[0];
+		const float f2i = transform[1];
+		transform += transform_stride;
+		const float f3r = transform[0];
+		const float f3i = transform[1];
+		transform += transform_stride;
+		const float f4r = transform[0];
+		const float f4i = transform[1];
+		transform += transform_stride;
+		const float f5r = transform[0];
+		const float f5i = transform[1];
+		transform += transform_stride;
+		const float f6r = transform[0];
+		const float f6i = transform[1];
+		transform += transform_stride;
+		const float f7r = transform[0];
+		const float f7i = transform[1];
+		transform += transform_stride;
+		scalar_ifft8_soa(
+			f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r,
+			f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i,
+			&block[row][0]);
 	}
 
-	block.as_float[0][0] += (*bias) * 64.0f;
-
-	psimd_ifft8_dualreal_f32(
-		&block.as_psimd_f32[0][0], &block.as_psimd_f32[0][1],
-		&block.as_psimd_f32[1][0], &block.as_psimd_f32[1][1]);
-	for (size_t row = 2; row < 8; row += 2) {
-		psimd_ifft8_soa_f32(
-			&block.as_psimd_f32[row    ][0], &block.as_psimd_f32[row    ][1],
-			&block.as_psimd_f32[row + 1][0], &block.as_psimd_f32[row + 1][1]);
+	for (uint32_t column = 0; column < BLOCK_SIZE; column++) {
+		const float f0  = block[0][column];
+		const float f4  = block[1][column];
+		const float f1r = block[2][column];
+		const float f1i = block[3][column];
+		const float f2r = block[4][column];
+		const float f2i = block[5][column];
+		const float f3r = block[6][column];
+		const float f3i = block[7][column];
+		scalar_ifft8_real(
+			f0, f4, f1r, f1i, f2r, f2i, f3r, f3i,
+			&block[0][column], &block[BLOCK_SIZE / 2][column],
+			BLOCK_SIZE);
 	}
 
-	psimd_ifft8_real_f32(
-		block.as_psimd_f32[0][0], block.as_psimd_f32[1][0], block.as_psimd_f32[2][0], block.as_psimd_f32[3][0],
-		block.as_psimd_f32[4][0], block.as_psimd_f32[5][0], block.as_psimd_f32[6][0], block.as_psimd_f32[7][0],
-		&block.as_float[0][0], &block.as_float[4][0], 8);
-	if (column_count > 4) {
-		psimd_ifft8_real_f32(
-			block.as_psimd_f32[0][1], block.as_psimd_f32[1][1], block.as_psimd_f32[2][1], block.as_psimd_f32[3][1],
-			block.as_psimd_f32[4][1], block.as_psimd_f32[5][1], block.as_psimd_f32[6][1], block.as_psimd_f32[7][1],
-			&block.as_float[0][4], &block.as_float[4][4], 8);
-	}
-
-	for (size_t row = 0; row < row_count; row++) {
-		for (size_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = block.as_float[row][column];
+	for (uint32_t row = 0; row < row_count; row++) {
+		for (uint32_t column = 0; column < column_count; column++) {
+			data[row * data_stride + column] = block[row][column];
 		}
 	}
 }
 
-void nnp_ifft8x8_with_bias_with_relu__psimd(
+void nnp_ifft8x8_with_bias_with_relu__scalar(
 	const float transform[restrict static 1],
 	float data[restrict static 1],
 	const float bias[restrict static 1],
@@ -213,40 +324,88 @@ void nnp_ifft8x8_with_bias_with_relu__psimd(
 {
 	transform_stride /= sizeof(float);
 
-	union block8x8 block;
-	for (size_t row = 0; row < 8; row += 2) {
-		for (size_t column = 0; column < 2; column += 1) {
-			block.as_psimd_f32[row][column] = psimd_load_f32(transform + 0);
-			block.as_psimd_f32[row + 1][column] = psimd_load_f32(transform + 4);
-			transform += transform_stride;
-		}
+	float block[BLOCK_SIZE][BLOCK_SIZE];
+
+	const float bias_value = *bias;
+	{
+		const float x0 = transform[0] + bias_value * 64.0f;
+		const float x4 = transform[1];
+		transform += transform_stride;
+		const float y0 = transform[0];
+		const float y4 = transform[1];
+		transform += transform_stride;
+		const float x1r = transform[0];
+		const float x1i = transform[1];
+		transform += transform_stride;
+		const float y1r = transform[0];
+		const float y1i = transform[1];
+		transform += transform_stride;
+		const float x2r = transform[0];
+		const float x2i = transform[1];
+		transform += transform_stride;
+		const float y2r = transform[0];
+		const float y2i = transform[1];
+		transform += transform_stride;
+		const float x3r = transform[0];
+		const float x3i = transform[1];
+		transform += transform_stride;
+		const float y3r = transform[0];
+		const float y3i = transform[1];
+		transform += transform_stride;
+		scalar_ifft8_dualreal(
+			x0, y0, x1r, y1r, x2r, y2r, x3r, y3r,
+			x4, y4, x1i, y1i, x2i, y2i, x3i, y3i,
+			&block[0][0]);
+	}
+	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
+		const float f0r = transform[0];
+		const float f0i = transform[1];
+		transform += transform_stride;
+		const float f1r = transform[0];
+		const float f1i = transform[1];
+		transform += transform_stride;
+		const float f2r = transform[0];
+		const float f2i = transform[1];
+		transform += transform_stride;
+		const float f3r = transform[0];
+		const float f3i = transform[1];
+		transform += transform_stride;
+		const float f4r = transform[0];
+		const float f4i = transform[1];
+		transform += transform_stride;
+		const float f5r = transform[0];
+		const float f5i = transform[1];
+		transform += transform_stride;
+		const float f6r = transform[0];
+		const float f6i = transform[1];
+		transform += transform_stride;
+		const float f7r = transform[0];
+		const float f7i = transform[1];
+		transform += transform_stride;
+		scalar_ifft8_soa(
+			f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r,
+			f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i,
+			&block[row][0]);
 	}
 
-	block.as_float[0][0] += (*bias) * 64.0f;
-
-	psimd_ifft8_dualreal_f32(
-		&block.as_psimd_f32[0][0], &block.as_psimd_f32[0][1],
-		&block.as_psimd_f32[1][0], &block.as_psimd_f32[1][1]);
-	for (size_t row = 2; row < 8; row += 2) {
-		psimd_ifft8_soa_f32(
-			&block.as_psimd_f32[row    ][0], &block.as_psimd_f32[row    ][1],
-			&block.as_psimd_f32[row + 1][0], &block.as_psimd_f32[row + 1][1]);
+	for (uint32_t column = 0; column < BLOCK_SIZE; column++) {
+		const float f0  = block[0][column];
+		const float f4  = block[1][column];
+		const float f1r = block[2][column];
+		const float f1i = block[3][column];
+		const float f2r = block[4][column];
+		const float f2i = block[5][column];
+		const float f3r = block[6][column];
+		const float f3i = block[7][column];
+		scalar_ifft8_real(
+			f0, f4, f1r, f1i, f2r, f2i, f3r, f3i,
+			&block[0][column], &block[BLOCK_SIZE / 2][column],
+			BLOCK_SIZE);
 	}
 
-	psimd_ifft8_real_f32(
-		block.as_psimd_f32[0][0], block.as_psimd_f32[1][0], block.as_psimd_f32[2][0], block.as_psimd_f32[3][0],
-		block.as_psimd_f32[4][0], block.as_psimd_f32[5][0], block.as_psimd_f32[6][0], block.as_psimd_f32[7][0],
-		&block.as_float[0][0], &block.as_float[4][0], 8);
-	if (column_count > 4) {
-		psimd_ifft8_real_f32(
-			block.as_psimd_f32[0][1], block.as_psimd_f32[1][1], block.as_psimd_f32[2][1], block.as_psimd_f32[3][1],
-			block.as_psimd_f32[4][1], block.as_psimd_f32[5][1], block.as_psimd_f32[6][1], block.as_psimd_f32[7][1],
-			&block.as_float[0][4], &block.as_float[4][4], 8);
-	}
-
-	for (size_t row = 0; row < row_count; row++) {
-		for (size_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = relu(block.as_float[row][column], 0.0f);
+	for (uint32_t row = 0; row < row_count; row++) {
+		for (uint32_t column = 0; column < column_count; column++) {
+			data[row * data_stride + column] = relu(block[row][column], 0.0f);
 		}
 	}
 }

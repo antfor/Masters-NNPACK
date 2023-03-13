@@ -376,46 +376,33 @@ ELSEIF(NNPACK_BACKEND STREQUAL "neon")
       src/neon/blas/s4c2gemm-conjb-transc.c)
   ENDIF()
 ELSEIF(NNPACK_BACKEND STREQUAL "sve")
-  SET(NNPACK_BACKEND_SRCS
+SET(NNPACK_BACKEND_SRCS
     # Transformations
     src/sve/2d-fourier-8x8.c
     src/sve/2d-fourier-16x16.c
-    src/neon/2d-winograd-8x8-3x3.c
-    src/neon/2d-winograd-8x8-3x3-fp16.c
+    src/scalar/2d-winograd-8x8-3x3.c
     # Tuple GEMM
-    src/neon/blas/h4gemm.c
-    src/neon/blas/s4gemm.c
-    src/neon/blas/c4gemm-conjb.c
-    src/neon/blas/s4c2gemm-conjb.c
+    src/scalar/blas/s2gemm.c
+    src/sve/blas/cgemm-conjb.c
     # Direct convolution
-    src/neon/blas/conv1x1.c
+    src/scalar/blas/conv1x1.c
     # BLAS microkernels
-    src/neon/blas/sgemm.c)
-  IF(CMAKE_SYSTEM_PROCESSOR MATCHES "^armv")
-    # 32-bit ARM (armv7, armv7-a, armv7l, etc)
-    LIST(APPEND NNPACK_BACKEND_SRCS
-      # BLAS microkernels
-      src/neon/blas/h4gemm-aarch32.S
-      src/neon/blas/s4gemm-aarch32.S
-      src/neon/blas/sgemm-aarch32.S)
-  ENDIF()
+    src/scalar/blas/sgemm.c)
   IF(NOT NNPACK_CONVOLUTION_ONLY)
     LIST(APPEND NNPACK_BACKEND_SRCS
-      # ReLU
-      src/neon/relu.c
-      # Softmax
-      src/psimd/softmax.c
+      # ReLU and Softmax
+      src/scalar/relu.c
+      src/scalar/softmax.c
       # BLAS microkernels
-      src/neon/blas/sdotxf.c
-      src/psimd/blas/shdotxf.c)
+      src/scalar/blas/sdotxf.c
+      src/scalar/blas/shdotxf.c)
   ENDIF()
   IF(NOT NNPACK_INFERENCE_ONLY)
     LIST(APPEND NNPACK_BACKEND_SRCS
       # Tuple GEMM
-      src/neon/blas/c4gemm.c
-      src/neon/blas/s4c2gemm.c
-      src/neon/blas/c4gemm-conjb-transc.c
-      src/neon/blas/s4c2gemm-conjb-transc.c)
+      src/scalar/blas/s2gemm-transc.c
+      src/scalar/blas/cgemm.c
+      src/scalar/blas/cgemm-conjb-transc.c)
   ENDIF()
 ELSEIF(NNPACK_BACKEND STREQUAL "psimd")
   SET(NNPACK_BACKEND_SRCS
@@ -514,11 +501,16 @@ ENDIF()
 IF(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   SET_PROPERTY(SOURCE ${NNPACK_BACKEND_SRCS} APPEND_STRING PROPERTY COMPILE_FLAGS " -O3 ")
 ENDIF()
+IF(NNPACK_BASELINE STREQUAL "true")
+  SET_PROPERTY(SOURCE ${NNPACK_BACKEND_SRCS} APPEND_STRING PROPERTY COMPILE_FLAGS " -fno-tree-vectorize ")
+ENDIF()
 TARGET_INCLUDE_DIRECTORIES(nnpack PUBLIC include)
 TARGET_INCLUDE_DIRECTORIES(nnpack PRIVATE src)
 IF(NNPACK_BACKEND STREQUAL "psimd")
   TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_PSIMD=1)
 ELSEIF(NNPACK_BACKEND STREQUAL "scalar")
+  TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SCALAR=1)
+ELSEIF(NNPACK_BACKEND STREQUAL "sve")
   TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SCALAR=1)
 ENDIF()
 IF(NNPACK_CONVOLUTION_ONLY)
@@ -614,6 +606,18 @@ IF(NNPACK_BUILD_TESTS)
   TARGET_INCLUDE_DIRECTORIES(convolution-inference-smoketest PRIVATE test)
   TARGET_LINK_LIBRARIES(convolution-inference-smoketest PRIVATE -static nnpack nnpack_reference_layers gtest)
   ADD_TEST(convolution-inference-smoketest convolution-inference-smoketest)
+
+  ADD_EXECUTABLE(convolution-inference-fft8x8 test/convolution-inference/fft8x8-only.cc)
+  NNPACK_TARGET_ENABLE_CXX11(convolution-inference-fft8x8)
+  TARGET_INCLUDE_DIRECTORIES(convolution-inference-fft8x8 PRIVATE test)
+  TARGET_LINK_LIBRARIES(convolution-inference-fft8x8 PRIVATE -static nnpack nnpack_reference_layers gtest)
+  ADD_TEST(convolution-inference-fft8x8 convolution-inference-fft8x8)
+
+  ADD_EXECUTABLE(convolution-inference-fft16x16 test/convolution-inference/fft16x16-only.cc)
+  NNPACK_TARGET_ENABLE_CXX11(convolution-inference-fft16x16)
+  TARGET_INCLUDE_DIRECTORIES(convolution-inference-fft16x16 PRIVATE test)
+  TARGET_LINK_LIBRARIES(convolution-inference-fft16x16 PRIVATE -static nnpack nnpack_reference_layers gtest)
+  ADD_TEST(convolution-inference-fft16x16 convolution-inference-fft16x16)
 
   ADD_EXECUTABLE(convolution-inference-alexnet-test test/convolution-inference/alexnet.cc)
   NNPACK_TARGET_ENABLE_CXX11(convolution-inference-alexnet-test)
