@@ -3,6 +3,110 @@
 #include <nnpack/fft-constants.h>
 #include <sve/fft/aos.h>
 #include <arm_sve.h>
+#include <sve/fft/fft-util.h>
+
+
+
+inline static void fft4xNr(
+    const float t_lo[restrict static 1],
+    const float t_hi[restrict static 1],
+    size_t stride_t,
+    uint32_t row_start, uint32_t row_count,
+    float f[restrict static 1],
+    const uint32_t N)
+{
+
+    const uint32_t BLOCK_SIZE = 4;
+    const uint32_t LENGTH = BLOCK_SIZE * N;
+    const uint32_t BLOCK_LENGTH = BLOCK_SIZE * BLOCK_SIZE;
+
+    svbool_t pg, pg_load, pg_a, pg_b;
+    svuint32_t t_lo_offset, t_hi_offset;
+    svfloat32_t b, a, new_b, new_a, new_bt;
+
+    const uint64_t numVals = svcntw();
+
+    const svfloat32_t twiddle = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
+
+    const svuint32_t ind_zip = index4(0, 2, 1, 3, 4);
+    const svuint32_t ind_low = index2(0, 1, 4);
+    const svuint32_t ind_high = index2(2, 3, 4);
+    const svuint32_t ind_store = index4(0 * 4, 1 * 4, 2 * 4, 3 * 4, 8 * 4);
+
+    aos4_pred_and_offset(row_start, row_count, &pg_a, &pg_b, stride_t, &t_lo_offset, &t_hi_offset);
+
+    for (uint32_t i = 0; i < LENGTH; i += numVals)
+    {
+        pg = svwhilelt_b32_s32(i, LENGTH);
+
+        // load
+        a = svld1_gather_offset(svmov_z(pg, pg_a), t_lo + i / BLOCK_SIZE, t_lo_offset);
+        b = svld1_gather_offset(svmov_z(pg, pg_b), t_hi + i / BLOCK_SIZE, t_hi_offset);
+
+        // stage1
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+        cmul_twiddle(&pg, &new_b, &twiddle, &new_bt);
+        suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
+
+        // stage2
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+
+        // store todo offset
+        svst1_scatter_offset(pg, f + i * 2 + 0, ind_store, new_a);
+        svst1_scatter_offset(pg, f + i * 2 + 4, ind_store, new_b);
+    }
+}
+
+static inline void sve_fft8xN_real(
+	const float t0[restrict static 1],
+	const float t4[restrict static 1],
+	size_t stride_t,
+	uint32_t row_offset, uint32_t row_count,
+	float f[restrict static 1],
+	size_t stride_f,
+	const uint32_t column_offset,
+	const uint32_t column_count)
+{
+	float w[8 * column_count];
+
+	fft4xNr(t0, t4, stride_t, row_offset, row_count, w, column_count);
+	
+	for(uint32_t column = 0; column < column_count; column++){ // todo vectorize, move to fft4xNr?
+		int offset = column *8;
+
+		const float half = 0.5f;
+		const float g1r = half * (w[2 + offset] + w[6 + offset]);
+		const float g1i = half * (w[3 + offset] - w[7 + offset]);
+		const float two_h1r = w[3 + offset] + w[7 + offset];
+		const float two_h1i = w[6 + offset] - w[2 + offset];
+
+		const float sqrt2_over_4 = SQRT2_OVER_4;
+		const float h1_plus  = sqrt2_over_4 * (two_h1i + two_h1r);
+		const float h1_minus = sqrt2_over_4 * (two_h1i - two_h1r);
+
+		const float f0 = w[0 + offset] + w[1 + offset];
+		const float f4 = w[0 + offset] - w[1 + offset];
+		const float f1r = g1r + h1_plus;
+		const float f1i = h1_minus + g1i;
+		const float f2r =  w[4 + offset];
+		const float f2i = -w[5 + offset];
+		const float f3r = g1r - h1_plus;
+		const float f3i = h1_minus - g1i;
+
+		/* Store outputs */
+		f[0 * stride_f] = f0;
+		f[1 * stride_f] = f4;
+		f[2 * stride_f] = f1r;
+		f[3 * stride_f] = f1i;
+		f[4 * stride_f] = f2r;
+		f[5 * stride_f] = f2i;
+		f[6 * stride_f] = f3r;
+		f[7 * stride_f] = f3i;
+
+		f += 1;
+	}
+
+}
 
 
 static inline void scalar_fft8_real(

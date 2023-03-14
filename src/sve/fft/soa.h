@@ -5,63 +5,13 @@
 #include <sve/fft/complex.h>
 
 
-static inline void sve_fft8_soa(
-	const float t[restrict static 16],
-	float f[restrict static 16])
-{
-
-	fft8(t,f);
-}
 
 static inline void sve_fft8x8_soa(
 	const float t[restrict static 16*4],
 	float f[restrict static 16*4],
 	size_t f_stride)
 {
-	fft8x8(t,f,f_stride);
-}
-
-
-static inline void scalar_fft8_soa_old(
-	const float t[restrict static 16],
-	float f0r[restrict static 1],
-	float f1r[restrict static 1],
-	float f2r[restrict static 1],
-	float f3r[restrict static 1],
-	float f4r[restrict static 1],
-	float f5r[restrict static 1],
-	float f6r[restrict static 1],
-	float f7r[restrict static 1],
-	float f0i[restrict static 1],
-	float f1i[restrict static 1],
-	float f2i[restrict static 1],
-	float f3i[restrict static 1],
-	float f4i[restrict static 1],
-	float f5i[restrict static 1],
-	float f6i[restrict static 1],
-	float f7i[restrict static 1])
-{
-
-	float f[16];
-
-	fft8(t,f);
-
-	*f0r = f[0];
-	*f0i = f[1];
-	*f1r = f[2];
-	*f1i = f[3];
-	*f2r = f[4];
-	*f2i = f[5];
-	*f3r = f[6];
-	*f3i = f[7];
-	*f4r = f[8];
-	*f4i = f[9];
-	*f5r = f[10];
-	*f5i = f[11];
-	*f6r = f[12];
-	*f6i = f[13];
-	*f7r = f[14];
-	*f7i = f[15];
+	fft8x8c(t,f,f_stride);
 }
 
 static inline void scalar_fft8_soa(

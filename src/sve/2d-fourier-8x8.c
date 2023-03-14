@@ -6,6 +6,7 @@
 #include <sve/fft/real.h>
 #include <sve/fft/soa.h>
 #include <sve/fft/dualreal.h>
+#include <sve/fft/sve-print.h>
 
 #include <nnpack/utils.h>
 #include <nnpack/activations.h>
@@ -16,17 +17,6 @@
 #define BLOCK_SIZE 8
 
 
-void print_transform(float *transform, size_t transform_stride) {
-	for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
-		for (uint32_t column = 0; column < BLOCK_SIZE /2; column++) {
-			printf("%f ", transform[0]);
-			printf("%f ", transform[1]);
-			transform += transform_stride;
-		}
-		printf("\n");
-	}
-	printf("\n");
-}
 
 void nnp_fft8x8_with_offset__scalar(
 	const float data[restrict static 1],
@@ -58,24 +48,13 @@ void nnp_fft8x8_with_offset__scalar(
 
 	const float *restrict row0 = data;
 	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
-	float* restrict output = &block[0][column_offset];
-	for (uint32_t column = column_offset; column < column_end; column++) {
-		scalar_fft8_real(row0, row4, data_stride,
-			row_offset, row_count,
-			&block[0][column], BLOCK_SIZE);
 
-		row0 += 1;
-		row4 += 1;
-		output += 1;
-	}
-
+	sve_fft8xN_real(row0, row4, data_stride,
+		row_offset, row_count,
+		&block[0][column_offset], BLOCK_SIZE, column_offset, column_count);
 	
-	{
-		
 	sve_fft8x8_soa(&block[0][0],transform,transform_stride); 
 	sve_fft8x8_dualreal(transform, transform_stride);
-
-	}
 
 }
 
