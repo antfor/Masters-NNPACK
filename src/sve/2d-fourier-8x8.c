@@ -26,34 +26,18 @@ void nnp_fft8x8_with_offset__scalar(
 	uint32_t row_offset, uint32_t column_offset)
 {
 
-	transform_stride /= sizeof(float); // todo remove
+	transform_stride /= sizeof(float);
 
-	float block[BLOCK_SIZE][BLOCK_SIZE];
-	if (column_offset != 0) {
-		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
-			for (uint32_t column = 0; column < column_offset; column++) {
-				block[row][column] = 0.0f;
-			}
-		}
-	}
-
-	const uint32_t column_end = column_offset + column_count;
-	if (column_end != BLOCK_SIZE) {
-		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
-			for (uint32_t column = column_end; column < BLOCK_SIZE; column++) {
-				block[row][column] = 0.0f;
-			}
-		}
-	}
+	float block[BLOCK_SIZE*BLOCK_SIZE] = {0.0f};
 
 	const float *restrict row0 = data;
 	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
 
 	sve_fft8xN_real(row0, row4, data_stride,
 		row_offset, row_count,
-		&block[0][column_offset], BLOCK_SIZE, column_offset, column_count);
+		&block[column_offset], BLOCK_SIZE, column_count);
 	
-	sve_fft8x8_soa(&block[0][0],transform,transform_stride); 
+	sve_fft8x8_soa(&block[0],transform,transform_stride); 
 	sve_fft8x8_dualreal(transform, transform_stride);
 
 }

@@ -67,7 +67,6 @@ static inline void fft8x8c(
     }
 }
 
-//todo remove
 static inline void fft8_armComputeLib(
     const float t[restrict static 16],
     float f[restrict static 16])
