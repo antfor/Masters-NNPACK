@@ -57,7 +57,7 @@ IF(NOT CMAKE_SYSTEM_PROCESSOR)
   IF(NOT IOS)
     MESSAGE(WARNING "CMAKE_SYSTEM_PROCESSOR is not defined, automatic configuration may choose suboptimal options")
   ENDIF()
-ELSEIF(NOT NNPACK_TARGET_PROCESSOR MATCHES "^(i686|x86_64|armv5te|armv7-a|armv7l|armv7|armv7s|aarch64|arm64|arm64e)$")
+ELSEIF(NOT NNPACK_TARGET_PROCESSOR MATCHES "^(i686|x86_64|armv5te|armv7-a|armv7l|armv7|armv7s|aarch64|arm64|arm64e|riscv)$")
   MESSAGE(FATAL_ERROR "Unrecognized NNPACK_TARGET_PROCESSOR = ${NNPACK_TARGET_PROCESSOR}")
 ENDIF()
 
@@ -384,6 +384,28 @@ SET(NNPACK_BACKEND_SRCS
     # Tuple GEMM
     src/scalar/blas/s2gemm.c
     src/sve/blas/cgemm-conjb.c
+    # Direct convolution
+    src/scalar/blas/conv1x1.c
+    # BLAS microkernels
+    src/scalar/blas/sgemm.c)
+  IF(NOT NNPACK_CONVOLUTION_ONLY)
+    LIST(APPEND NNPACK_BACKEND_SRCS
+      # ReLU and Softmax
+      src/scalar/relu.c
+      src/scalar/softmax.c
+      # BLAS microkernels
+      src/scalar/blas/sdotxf.c
+      src/scalar/blas/shdotxf.c)
+  ENDIF()
+ELSEIF(NNPACK_BACKEND STREQUAL "riscv-v")
+SET(NNPACK_BACKEND_SRCS
+    # Transformations
+    src/riscv-v/2d-fourier-8x8.c
+    src/riscv-v/2d-fourier-16x16.c
+    src/scalar/2d-winograd-8x8-3x3.c
+    # Tuple GEMM
+    src/scalar/blas/s2gemm.c
+    src/scalar/blas/cgemm-conjb.c
     # Direct convolution
     src/scalar/blas/conv1x1.c
     # BLAS microkernels

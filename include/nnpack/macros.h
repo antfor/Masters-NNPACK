@@ -22,6 +22,8 @@
 	#endif
 #elif defined(__arm__) || defined(__aarch64__)
 	#define NNP_BACKEND_ARM 1
+#elif defined(__riscv) 
+	#define NNP_BACKEND_RISCV 1
 #elif defined(__ANDROID__) && (defined(__i686__) || defined(__x86_64__))
 	#define NNP_BACKEND_PSIMD 1
 #elif defined(__x86_64__)
