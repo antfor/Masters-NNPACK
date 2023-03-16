@@ -8,7 +8,7 @@ PROJECT(NNPACK C CXX ASM)
 
 # ---[ Options.
 SET(NNPACK_BACKEND "auto" CACHE STRING "Backend for micro-kernels implementation")
-SET_PROPERTY(CACHE NNPACK_BACKEND PROPERTY STRINGS auto psimd scalar)
+SET_PROPERTY(CACHE NNPACK_BACKEND PROPERTY STRINGS auto psimd scalar sve riscvv)
 OPTION(NNPACK_CONVOLUTION_ONLY "Build only NNPACK functions for convolutional layer" OFF)
 OPTION(NNPACK_INFERENCE_ONLY "Build only NNPACK functions for inference" OFF)
 OPTION(NNPACK_CUSTOM_THREADPOOL "Build NNPACK for custom thread pool" OFF)
@@ -397,11 +397,11 @@ SET(NNPACK_BACKEND_SRCS
       src/scalar/blas/sdotxf.c
       src/scalar/blas/shdotxf.c)
   ENDIF()
-ELSEIF(NNPACK_BACKEND STREQUAL "riscv-v")
+ELSEIF(NNPACK_BACKEND STREQUAL "riscvv")
 SET(NNPACK_BACKEND_SRCS
     # Transformations
-    src/riscv-v/2d-fourier-8x8.c
-    src/riscv-v/2d-fourier-16x16.c
+    src/riscvv/2d-fourier-8x8.c
+    src/riscvv/2d-fourier-16x16.c
     src/scalar/2d-winograd-8x8-3x3.c
     # Tuple GEMM
     src/scalar/blas/s2gemm.c
@@ -533,6 +533,8 @@ IF(NNPACK_BACKEND STREQUAL "psimd")
 ELSEIF(NNPACK_BACKEND STREQUAL "scalar")
   TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SCALAR=1)
 ELSEIF(NNPACK_BACKEND STREQUAL "sve")
+  TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SCALAR=1)
+ELSEIF(NNPACK_BACKEND STREQUAL "riscvv")
   TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SCALAR=1)
 ENDIF()
 IF(NNPACK_CONVOLUTION_ONLY)

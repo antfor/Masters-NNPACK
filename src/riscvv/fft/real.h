@@ -1,7 +1,7 @@
 #pragma once
 
 #include <nnpack/fft-constants.h>
-#include <riscv-v/fft/aos.h>
+#include <riscvv/fft/aos.h>
 
 
 static inline void scalar_fft8_real(

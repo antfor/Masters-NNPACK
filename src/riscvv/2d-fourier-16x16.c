@@ -1,9 +1,9 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include <riscv-v/fft/real.h>
-#include <riscv-v/fft/soa.h>
-#include <riscv-v/fft/dualreal.h>
+#include <riscvv/fft/real.h>
+#include <riscvv/fft/soa.h>
+#include <riscvv/fft/dualreal.h>
 
 #include <nnpack/utils.h>
 #include <nnpack/activations.h>
