@@ -5,6 +5,62 @@
 #include <arm_sve.h>
 
 
+static inline void sve_ifft8x8_dualreal(float transform[restrict static 16], size_t transform_stride){
+
+	size_t offset = 0;
+	
+	float x0 = transform[0 + offset];
+	float x4 = transform[1 + offset]; 
+	offset += transform_stride;
+	float y0 = transform[0 + offset];
+	float y4 = transform[1 + offset];
+	offset += transform_stride;
+	float x1r = transform[0 + offset];
+	float x1i = transform[1 + offset];
+	offset += transform_stride;
+	float y1r = transform[0 + offset];
+	float y1i = transform[1 + offset];
+	offset += transform_stride;
+	float x2r = transform[0 + offset];
+	float x2i = transform[1 + offset];
+	offset += transform_stride;
+	float y2r = transform[0 + offset];
+	float y2i = transform[1 + offset];
+	offset += transform_stride;
+	float x3r = transform[0 + offset];
+	float x3i = transform[1 + offset];
+	offset += transform_stride;
+	float y3r = transform[0 + offset];
+	float y3i = transform[1 + offset];
+	
+
+	transform[0] = x0;
+	transform[1] = x4;
+	transform += transform_stride;
+	transform[0] = x1r - y1i;
+	transform[1] = x1i + y1r;
+	transform += transform_stride;
+	transform[0] = x2r - y2i;
+	transform[1] = x2i + y2r;
+	transform += transform_stride;
+	transform[0] = x3r - y3i;
+	transform[1] = x3i + y3r;
+	transform += transform_stride;
+	transform[0] = y0;
+	transform[1] = y4;
+	transform += transform_stride;
+	transform[0] = y3i + x3r;
+	transform[1] = y3r - x3i;
+	transform += transform_stride;
+	transform[0] = y2i + x2r;
+	transform[1] = y2r - x2i;
+	transform += transform_stride;
+	transform[0] = y1i + x1r;
+	transform[1] = y1r - x1i;
+
+}
+
+
 static inline void sve_fft8x8_dualreal(float transform[restrict static 16], size_t transform_stride){
 
 	float w[16] = {0.0f};
@@ -60,6 +116,10 @@ static inline void sve_fft8x8_dualreal(float transform[restrict static 16], size
 	transform[1] = 0.5f * (w[5] - w[3]);
 
 }
+
+
+
+
 
 static inline void scalar_fft8_dualreal(
 	const float seq[restrict static 16],

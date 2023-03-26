@@ -18,7 +18,7 @@ inline static void fft4xNr(
 	const uint32_t BLOCK_SIZE = 4;
 	const uint32_t LENGTH = BLOCK_SIZE * N;
 
-	svbool_t pg, pg_load, pg_a, pg_b;
+	svbool_t pg, pg_a, pg_b;
 	svuint32_t t_lo_offset, t_hi_offset;
 	svfloat32_t b, a, new_b, new_a, new_bt;
 
@@ -177,6 +177,23 @@ static inline void sve_fft8xN_real(
 	fft4xNr(t0, t4, stride_t, row_offset, row_count, w, column_count);
 
 	stuff_real8_needs_to_do_sve(w, column_count, f, stride_f);
+}
+
+
+static inline void sve_ifft8xN_real(
+	const float t0[restrict static 1],
+	const float t4[restrict static 1],
+	size_t stride_t,
+	uint32_t row_offset, uint32_t row_count,
+	float f[restrict static 1],
+	size_t stride_f,
+	const uint32_t column_count)
+{
+	float w[8 * column_count];
+
+	//ifft4xNr(t0, t4, stride_t, row_offset, row_count, w, column_count);
+
+	//stuff_real8_needs_to_do_sve(w, column_count, f, stride_f);
 }
 
 static inline void scalar_fft8_real(

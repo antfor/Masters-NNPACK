@@ -31,7 +31,7 @@ static inline void sve_fft8x8_complex(
     svfloat32_t b, a, new_b, new_a, new_bt;
 
     const int simd_width = nnp_hwinfo.simd_width; 
-  //  const uint64_t numVals = simd_width * 2; // a and b
+  //  const uint64_t numVals = qa * 2; // a and b
     const int dim = 2; //complex number 
     const uint64_t numVals = svcntw() * dim; // a and b
 
@@ -44,13 +44,8 @@ static inline void sve_fft8x8_complex(
     const int to_bytes = 4; 
     const svuint32_t ind_load = index8(to_bytes * 0, to_bytes * 8, to_bytes * 1, to_bytes * 9, to_bytes * 2, to_bytes * 10, to_bytes * 3, to_bytes * 11, to_bytes * 16);
     
-     //svuint32_t offsets = index8(4 * f_stride * 0 + 0, 4 * f_stride * 0 + 4, 4 * f_stride * 1 + 0, 4 * f_stride * 1 + 4, 4 * f_stride * 2 + 0, 4 * f_stride * 2 + 4, 4 * f_stride * 3 + 0, 4 * f_stride * 3 + 4, 4 * f_stride * BLOCK_SIZE);
-     svuint32_t offsets = soa_offset(simd_width, f_stride, BLOCK_SIZE);
-
-   // printf("start\n");
-   // svprint_ui(svptrue_b32(), offsets1,16);
-   // svprint_ui(svptrue_b32(), offsets,16);
-   // printf("end\n");
+     //const svuint32_t offsets = index8(4 * f_stride * 0 + 0, 4 * f_stride * 0 + 4, 4 * f_stride * 1 + 0, 4 * f_stride * 1 + 4, 4 * f_stride * 2 + 0, 4 * f_stride * 2 + 4, 4 * f_stride * 3 + 0, 4 * f_stride * 3 + 4, 4 * f_stride * BLOCK_SIZE);
+     const svuint32_t offsets = soa_offset(simd_width, f_stride, BLOCK_SIZE);
 
     for (uint32_t i = 0; i < LENGTH; i += numVals)
     {
@@ -79,6 +74,66 @@ static inline void sve_fft8x8_complex(
         //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + f_stride * 4, offsets, new_b);
         svst1_scatter_offset(pg_load, f + i / simd_width / 2 * f_stride + 0, offsets, new_a);
         svst1_scatter_offset(pg_load, f + i / simd_width / 2 * f_stride + f_stride * BLOCK_SIZE/2/simd_width + BLOCK_SIZE % (simd_width * 2), offsets, new_b);
+    }
+}
+
+
+static inline void sve_ifft8x8_complex(
+    const float t[restrict static 16 * 4],
+    float f[restrict static 16 * 4],
+    size_t f_stride)
+{
+
+    const uint32_t BLOCK_SIZE = 8;
+    const uint32_t LENGTH = BLOCK_SIZE * BLOCK_SIZE;
+
+    const svfloat32_t twiddle_1 = svzip1(svdupq_f32(COS_0PI_OVER_4, COS_1PI_OVER_4, COS_2PI_OVER_4, COS_3PI_OVER_4), svdupq_f32(SIN_0PI_OVER_4, SIN_1PI_OVER_4, SIN_2PI_OVER_4, SIN_3PI_OVER_4));
+    const svfloat32_t twiddle_2 = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
+
+    svbool_t pg, pg_load;
+    svfloat32_t b, a, new_b, new_a, new_bt;
+
+    const int simd_width = nnp_hwinfo.simd_width; 
+  //  const uint64_t numVals = qa * 2; // a and b
+    const int dim = 2; //complex number 
+    const uint64_t numVals = svcntw() * dim; // a and b
+
+    const svuint32_t ind_zip = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
+    const svuint32_t ind_low = index4(0, 1, 2, 3, 8);
+    const svuint32_t ind_high = index4(4, 5, 6, 7, 8);
+    const svuint32_t ind_even = index4(0, 1, 4, 5, 8);
+    const svuint32_t ind_odd = index4(2, 3, 6, 7, 8);
+    
+    const svuint32_t offsets = soa_offset(simd_width, f_stride, BLOCK_SIZE);
+
+    for (uint32_t i = 0; i < LENGTH; i += numVals)
+    {
+
+        pg = svwhilelt_b32_s32(i / dim, LENGTH / dim);
+        pg_load = svzip1_b32(pg, pg); // svwhilelt_b32_s32(i, LENGTH);
+
+        a = svld1_gather_offset(pg_load, t + i, offsets);
+        b = svld1_gather_offset(pg_load, t + i + BLOCK_SIZE / 2, offsets);
+
+        // stage3
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+
+        // stage2
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+        cmul_twiddle(&pg, &new_b, &twiddle_2, &new_bt);
+        suffle(&pg, &new_a, &new_bt, &ind_even, &ind_odd, &ind_zip, &a, &b);
+
+        // stage1
+        butterfly(&pg, &a, &b, &new_a, &new_b);
+        cmul_twiddle(&pg, &new_b, &twiddle_1, &new_bt);
+        suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
+
+
+        // store
+        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + 0, offsets, new_a);
+        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + f_stride * 4, offsets, new_b);
+        svst1(pg_load, f + i, new_a);
+        svst1(pg_load, f + i + LENGTH / 2, new_b); 
     }
 }
 
