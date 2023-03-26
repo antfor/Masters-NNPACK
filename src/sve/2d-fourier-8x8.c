@@ -4,7 +4,8 @@
 #include <stdio.h>
 
 #include <sve/fft/real.h>
-#include <sve/fft/soa.h>
+#include <sve/fft/complex.h> 
+#include <sve/fft/soa.h> 
 #include <sve/fft/dualreal.h>
 #include <sve/fft/sve-print.h>
 
@@ -37,7 +38,7 @@ void nnp_fft8x8_with_offset__scalar(
 		row_offset, row_count,
 		&block[column_offset], BLOCK_SIZE, column_count);
 	
-	sve_fft8x8_soa(&block[0],transform,transform_stride); 
+	sve_fft8x8_complex(&block[0],transform,transform_stride); 
 	sve_fft8x8_dualreal(transform, transform_stride);
 
 }

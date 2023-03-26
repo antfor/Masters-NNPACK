@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#include<stdlib.h>
 
 
 //--fft--------------------------------------------------------------
@@ -57,4 +58,32 @@ static inline svuint32_t index8(uint32_t i0, uint32_t i1, uint32_t i2, uint32_t 
 }
 
 
+static inline svuint32_t indexN(uint32_t *ab, uint32_t N, uint32_t step){
+
+    switch (N)
+    {
+    case 2:
+        return index2(ab[0], ab[1], step);
+    case 4:
+        return index4(ab[0], ab[1], ab[2], ab[3], step);
+    case 8:
+        return index8(ab[0], ab[1], ab[2], ab[3], ab[4], ab[5], ab[6], ab[7], step);
+    default:
+        printf("indexN todo add index for N=%d\n", N);
+        exit(0.0);
+        break;
+    }
+}
+
+
+//----gp-utils-----------------------------------------------------------------
+
+static inline int imin(int a, int b){
+	return a < b ? a : b;
+}
+
+
+static inline int imax(int a, int b){
+	return a > b ? a : b;
+}
 

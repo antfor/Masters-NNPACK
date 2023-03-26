@@ -81,3 +81,11 @@ static inline void print_array_f(float *arr, int n)
 
     printf("\n");
 }
+
+static inline void print_array_i(int *arr, int n)
+{
+    for (int i = 0; i < n; i++)
+        printf("%d ", arr[i]);
+
+    printf("\n");
+}

@@ -9,11 +9,13 @@
 #include <stdbool.h>
 #include <sve/fft/fft-util.h>
 #include <sve/fft/sve-print.h>
+#include <sve/fft/soa.h>
+#include <nnpack/hwinfo.h>
 
 
 
 //                      _256
-static inline void fft8x8c(
+static inline void sve_fft8x8_complex(
     const float t[restrict static 16 * 4],
     float f[restrict static 16 * 4],
     size_t f_stride)
@@ -28,7 +30,10 @@ static inline void fft8x8c(
     svbool_t pg, pg_load;
     svfloat32_t b, a, new_b, new_a, new_bt;
 
-    const uint64_t numVals = svcntw() * 2; // a and b
+    const int simd_width = nnp_hwinfo.simd_width; 
+  //  const uint64_t numVals = simd_width * 2; // a and b
+    const int dim = 2; //complex number 
+    const uint64_t numVals = svcntw() * dim; // a and b
 
     const svuint32_t ind_zip = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
     const svuint32_t ind_low = index4(0, 1, 2, 3, 8);
@@ -36,13 +41,21 @@ static inline void fft8x8c(
     const svuint32_t ind_even = index4(0, 1, 4, 5, 8);
     const svuint32_t ind_odd = index4(2, 3, 6, 7, 8);
     // const svuint32_t ind_load = index8(0, 8, 1, 9, 2, 10, 3, 11, 16);
-    const svuint32_t ind_load = index8(4 * 0, 4 * 8, 4 * 1, 4 * 9, 4 * 2, 4 * 10, 4 * 3, 4 * 11, 4 * 16);
-    const svuint32_t offsets = index8(4 * f_stride * 0 + 0, 4 * f_stride * 0 + 4, 4 * f_stride * 1 + 0, 4 * f_stride * 1 + 4, 4 * f_stride * 2 + 0, 4 * f_stride * 2 + 4, 4 * f_stride * 3 + 0, 4 * f_stride * 3 + 4, 4 * f_stride * BLOCK_SIZE);
+    const int to_bytes = 4; 
+    const svuint32_t ind_load = index8(to_bytes * 0, to_bytes * 8, to_bytes * 1, to_bytes * 9, to_bytes * 2, to_bytes * 10, to_bytes * 3, to_bytes * 11, to_bytes * 16);
+    
+     //svuint32_t offsets = index8(4 * f_stride * 0 + 0, 4 * f_stride * 0 + 4, 4 * f_stride * 1 + 0, 4 * f_stride * 1 + 4, 4 * f_stride * 2 + 0, 4 * f_stride * 2 + 4, 4 * f_stride * 3 + 0, 4 * f_stride * 3 + 4, 4 * f_stride * BLOCK_SIZE);
+     svuint32_t offsets = soa_offset(simd_width, f_stride, BLOCK_SIZE);
+
+   // printf("start\n");
+   // svprint_ui(svptrue_b32(), offsets1,16);
+   // svprint_ui(svptrue_b32(), offsets,16);
+   // printf("end\n");
 
     for (uint32_t i = 0; i < LENGTH; i += numVals)
     {
 
-        pg = svwhilelt_b32_s32(i / 2, LENGTH / 2);
+        pg = svwhilelt_b32_s32(i / dim, LENGTH / dim);
         pg_load = svzip1_b32(pg, pg); // svwhilelt_b32_s32(i, LENGTH);
 
         a = svld1_gather_offset(pg_load, t + i, ind_load);
@@ -62,8 +75,10 @@ static inline void fft8x8c(
         butterfly(&pg, &a, &b, &new_a, &new_b);
 
         // store
-        svst1_scatter_offset(pg_load, f + i / 2 * f_stride + 0, offsets, new_a);
-        svst1_scatter_offset(pg_load, f + i / 2 * f_stride + f_stride * 4, offsets, new_b);
+        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + 0, offsets, new_a);
+        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + f_stride * 4, offsets, new_b);
+        svst1_scatter_offset(pg_load, f + i / simd_width / 2 * f_stride + 0, offsets, new_a);
+        svst1_scatter_offset(pg_load, f + i / simd_width / 2 * f_stride + f_stride * BLOCK_SIZE/2/simd_width + BLOCK_SIZE % (simd_width * 2), offsets, new_b);
     }
 }
 
