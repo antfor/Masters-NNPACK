@@ -87,7 +87,7 @@ static inline void sve_ifft8x8_complex(
     const uint32_t BLOCK_SIZE = 8;
     const uint32_t LENGTH = BLOCK_SIZE * BLOCK_SIZE;
 
-    const svfloat32_t twiddle_1 = svzip1(svdupq_f32(COS_0PI_OVER_4, COS_1PI_OVER_4, COS_2PI_OVER_4, COS_3PI_OVER_4), svdupq_f32(SIN_0PI_OVER_4, SIN_1PI_OVER_4, SIN_2PI_OVER_4, SIN_3PI_OVER_4));
+    const svfloat32_t scaled_twiddle_1 = svzip1(svdupq_f32(0.0125f * COS_0PI_OVER_4, 0.0125f * COS_1PI_OVER_4, 0.0125f * COS_2PI_OVER_4, 0.0125f * COS_3PI_OVER_4), svdupq_f32(0.0125f * SIN_0PI_OVER_4, 0.0125f * SIN_1PI_OVER_4, 0.0125f * SIN_2PI_OVER_4, 0.0125f * SIN_3PI_OVER_4));
     const svfloat32_t twiddle_2 = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
 
     svbool_t pg, pg_load;
@@ -119,15 +119,17 @@ static inline void sve_ifft8x8_complex(
         butterfly(&pg, &a, &b, &new_a, &new_b);
 
         // stage2
-        butterfly(&pg, &a, &b, &new_a, &new_b);
-        cmul_twiddle(&pg, &new_b, &twiddle_2, &new_bt);
-        suffle(&pg, &new_a, &new_bt, &ind_even, &ind_odd, &ind_zip, &a, &b);
-
+        //suffle(&pg, &new_a, &new_bt, &ind_even, &ind_odd, &ind_zip, &a, &b);
+        a = svzip1(new_a, new_b);
+        b = svzip2(new_a, new_b);
+        cmul_twiddle(&pg, &b, &twiddle_2, &new_bt);
+        butterfly(&pg, &a, &new_bt, &new_a, &new_b);
+        
         // stage1
-        butterfly(&pg, &a, &b, &new_a, &new_b);
-        cmul_twiddle(&pg, &new_b, &twiddle_1, &new_bt);
-        suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
-
+        suffle(&pg, &new_a, &new_b, &ind_low, &ind_high, &ind_zip, &a, &b);
+        cmul_twiddle(&pg, &b, &scaled_twiddle_1, &new_bt);
+        a = svmul_m(pg, a, svdup_f32(0.0125f));
+        butterfly(&pg, &a, &new_bt, &new_a, &new_b);
 
         // store
         //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + 0, offsets, new_a);

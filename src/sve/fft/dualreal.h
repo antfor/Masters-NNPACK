@@ -35,7 +35,7 @@ static inline void sve_ifft8x8_dualreal(float transform[restrict static 16], siz
 	
 
 	transform[0] = x0;
-	transform[1] = x4;
+	transform[1] = y0;
 	transform += transform_stride;
 	transform[0] = x1r - y1i;
 	transform[1] = x1i + y1r;
@@ -46,7 +46,7 @@ static inline void sve_ifft8x8_dualreal(float transform[restrict static 16], siz
 	transform[0] = x3r - y3i;
 	transform[1] = x3i + y3r;
 	transform += transform_stride;
-	transform[0] = y0;
+	transform[0] = x4;
 	transform[1] = y4;
 	transform += transform_stride;
 	transform[0] = y3i + x3r;
