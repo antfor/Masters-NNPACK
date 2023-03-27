@@ -107,7 +107,7 @@ fft4_twiddle:
 		// b * mul_b + a
 		svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 
-		svst1(pq, f, sv_final);
+		svst1(pq, f + i, sv_final);
 	}
 }
 
@@ -145,7 +145,7 @@ static inline void sve_ifft4_aos(
 			svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 			sv_final = svmul_f32_m(pq, sv_final, sv_quarter);
 			
-			svst1(pq, part1_w, sv_final);
+			svst1(pq, part1_w + i, sv_final);
 		}
 	}
 
@@ -171,7 +171,7 @@ static inline void sve_ifft4_aos(
 
 			svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 			
-			svst1(pq, part2_w, sv_final);
+			svst1(pq, part2_w + i, sv_final);
 		}
 	}
 	
@@ -400,7 +400,7 @@ fft8_twiddle:;
 			
 			svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 
-			svst1(pq, part1_w, sv_final);
+			svst1(pq, part1_w + i, sv_final);
 		}
 	}
 
@@ -458,7 +458,7 @@ fft8_twiddle:;
 			
 			svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 
-			svst1(pq, f, sv_final);
+			svst1(pq, f + i, sv_final);
 		}
 	}
 }
@@ -515,7 +515,7 @@ static inline void sve_ifft8_aos(
 			
 			svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 
-			svst1(pq, part1_w, sv_final);
+			svst1(pq, part1_w + i, sv_final);
 		}
 	}
 
@@ -573,7 +573,7 @@ static inline void sve_ifft8_aos(
 			
 			svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 
-			svst1(pq, part2_w, sv_final);
+			svst1(pq, part2_w + i, sv_final);
 		}
 	}
 
@@ -655,7 +655,7 @@ static inline void sve_ifft8_aos(
 			svfloat32_t sv_final = svmad_f32_m(pq, sv_b, sv_mul_b, sv_a);
 			sv_final = svmul_f32_m(pq, sv_final, sv_scale);
 
-			svst1(pq, part3_w, sv_final);
+			svst1(pq, part3_w + i, sv_final);
 		}
 	}
 
