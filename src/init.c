@@ -4,8 +4,6 @@
 
 #include <pthread.h>
 
-#include <cpuinfo.h>
-
 #include <nnpack.h>
 #include <nnpack/hwinfo.h>
 #include <nnpack/blas.h>
@@ -611,6 +609,6 @@ enum nnp_status nnp_initialize(void) {
 }
 
 enum nnp_status nnp_deinitialize(void) {
-	cpuinfo_deinitialize();
+	//cpuinfo_deinitialize();
 	return nnp_status_success;
 }

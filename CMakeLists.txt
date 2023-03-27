@@ -177,16 +177,6 @@ IF(NNPACK_BACKEND STREQUAL "x86-64")
   ENDIF()
 ENDIF()
 
-IF(NOT DEFINED CPUINFO_SOURCE_DIR)
-  MESSAGE(STATUS "Downloading cpuinfo to ${CONFU_DEPENDENCIES_SOURCE_DIR}/cpuinfo (define CPUINFO_SOURCE_DIR to avoid it)")
-  CONFIGURE_FILE(cmake/DownloadCpuinfo.cmake "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo-download/CMakeLists.txt")
-  EXECUTE_PROCESS(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" .
-    WORKING_DIRECTORY "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo-download")
-  EXECUTE_PROCESS(COMMAND "${CMAKE_COMMAND}" --build .
-    WORKING_DIRECTORY "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo-download")
-  SET(CPUINFO_SOURCE_DIR "${CONFU_DEPENDENCIES_SOURCE_DIR}/cpuinfo" CACHE STRING "cpuinfo source directory")
-ENDIF()
-
 IF(NOT DEFINED FP16_SOURCE_DIR)
   MESSAGE(STATUS "Downloading FP16 to ${CONFU_DEPENDENCIES_SOURCE_DIR}/fp16 (define FP16_SOURCE_DIR to avoid it)")
   CONFIGURE_FILE(cmake/DownloadFP16.cmake "${CONFU_DEPENDENCIES_BINARY_DIR}/fp16-download/CMakeLists.txt")
@@ -553,18 +543,6 @@ ADD_LIBRARY(nnpack_reference_layers STATIC ${NNPACK_REFERENCE_LAYERS_SRCS})
 NNPACK_TARGET_ENABLE_C99(nnpack_reference_layers)
 TARGET_INCLUDE_DIRECTORIES(nnpack_reference_layers PUBLIC include)
 
-# ---[ Configure cpuinfo
-IF(NOT TARGET cpuinfo)
-  SET(CPUINFO_BUILD_TOOLS OFF CACHE BOOL "")
-  SET(CPUINFO_BUILD_UNIT_TESTS OFF CACHE BOOL "")
-  SET(CPUINFO_BUILD_MOCK_TESTS OFF CACHE BOOL "")
-  SET(CPUINFO_BUILD_BENCHMARKS OFF CACHE BOOL "")
-  ADD_SUBDIRECTORY(
-    "${CPUINFO_SOURCE_DIR}"
-    "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo")
-ENDIF()
-TARGET_LINK_LIBRARIES(nnpack PRIVATE cpuinfo)
-
 # ---[ Configure pthreadpool
 IF(NOT TARGET pthreadpool)
   SET(PTHREADPOOL_BUILD_TESTS OFF CACHE BOOL "")
@@ -630,6 +608,12 @@ IF(NNPACK_BUILD_TESTS)
   TARGET_INCLUDE_DIRECTORIES(convolution-inference-smoketest PRIVATE test)
   TARGET_LINK_LIBRARIES(convolution-inference-smoketest PRIVATE -static nnpack nnpack_reference_layers gtest)
   ADD_TEST(convolution-inference-smoketest convolution-inference-smoketest)
+  
+  ADD_EXECUTABLE(fft-test test/fft-test.cc)
+  NNPACK_TARGET_ENABLE_CXX11(fft-test)
+  TARGET_INCLUDE_DIRECTORIES(fft-test PRIVATE test)
+  TARGET_LINK_LIBRARIES(fft-test PRIVATE -static nnpack nnpack_reference_layers gtest)
+  ADD_TEST(fft-test fft-test)
 
   ADD_EXECUTABLE(convolution-inference-fft8x8 test/convolution-inference/fft8x8-only.cc)
   NNPACK_TARGET_ENABLE_CXX11(convolution-inference-fft8x8)
