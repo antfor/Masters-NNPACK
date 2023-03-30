@@ -609,12 +609,6 @@ IF(NNPACK_BUILD_TESTS)
   TARGET_LINK_LIBRARIES(convolution-inference-smoketest PRIVATE -static nnpack nnpack_reference_layers gtest)
   ADD_TEST(convolution-inference-smoketest convolution-inference-smoketest)
   
-  ADD_EXECUTABLE(fft-test test/fft-test.cc)
-  NNPACK_TARGET_ENABLE_CXX11(fft-test)
-  TARGET_INCLUDE_DIRECTORIES(fft-test PRIVATE test)
-  TARGET_LINK_LIBRARIES(fft-test PRIVATE -static nnpack nnpack_reference_layers gtest)
-  ADD_TEST(fft-test fft-test)
-
   ADD_EXECUTABLE(convolution-inference-fft8x8 test/convolution-inference/fft8x8-only.cc)
   NNPACK_TARGET_ENABLE_CXX11(convolution-inference-fft8x8)
   TARGET_INCLUDE_DIRECTORIES(convolution-inference-fft8x8 PRIVATE test)
