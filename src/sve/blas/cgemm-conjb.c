@@ -50,22 +50,22 @@ void nnp_cVLgemm_conjb_only_2x2__sve(
 		svAcc00r = svmla_m(p0, svAcc00r, a0r, b0r);
 		svAcc00r = svmla_m(p0, svAcc00r, a0i, b0i);
 		svAcc00i = svmla_m(p0, svAcc00i, a0i, b0r);
-		svAcc00i = svmsb_m(p0, a0r, b0i, svAcc00i);
+		svAcc00i = svmls_m(p0, svAcc00i, a0r, b0i);
 
 		svAcc01r = svmla_m(p0, svAcc01r, a0r, b1r);
 		svAcc01r = svmla_m(p0, svAcc01r, a0i, b1i);
 		svAcc01i = svmla_m(p0, svAcc01i, a0i, b1r);
-		svAcc01i = svmsb_m(p0, a0r, b1i, svAcc01i);
+		svAcc01i = svmls_m(p0, svAcc01i, a0r, b1i);
 
 		svAcc10r = svmla_m(p0, svAcc10r, a1r, b0r);
 		svAcc10r = svmla_m(p0, svAcc10r, a1i, b0i);
 		svAcc10i = svmla_m(p0, svAcc10i, a1i, b0r);
-		svAcc10i = svmsb_m(p0, a1r, b0i, svAcc10i);
+		svAcc10i = svmls_m(p0, svAcc10i, a1r, b0i);
 
 		svAcc11r = svmla_m(p0, svAcc11r, a1r, b1r);
 		svAcc11r = svmla_m(p0, svAcc11r, a1i, b1i);
 		svAcc11i = svmla_m(p0, svAcc11i, a1i, b1r);
-		svAcc11i = svmsb_m(p0, a1r, b1i, svAcc11i);
+		svAcc11i = svmls_m(p0, svAcc11i, a1r, b1i);
 	}
 
 	if (update != 0)
@@ -136,7 +136,7 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 		svAcc00r = svmla_m(p0, svAcc00r, a0r, b0r);
 		svAcc00r = svmla_m(p0, svAcc00r, a0i, b0i);
 		svAcc00i = svmla_m(p0, svAcc00i, a0i, b0r);
-		svAcc00i = svmsb_m(p0, a0r, b0i, svAcc00i);
+		svAcc00i = svmls_m(p0, svAcc00i, a0r, b0i);
 
 		if (nr > 1)
 		{
@@ -147,7 +147,7 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 			svAcc01r = svmla_m(p0, svAcc01r, a0r, b1r);
 			svAcc01r = svmla_m(p0, svAcc01r, a0i, b1i);
 			svAcc01i = svmla_m(p0, svAcc01i, a0i, b1r);
-			svAcc01i = svmsb_m(p0, a0r, b1i, svAcc01i);
+			svAcc01i = svmls_m(p0, svAcc01i, a0r, b1i);
 		}
 
 		if (mr > 1)
@@ -159,7 +159,7 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 			svAcc10r = svmla_m(p0, svAcc10r, a1r, b0r);
 			svAcc10r = svmla_m(p0, svAcc10r, a1i, b0i);
 			svAcc10i = svmla_m(p0, svAcc10i, a1i, b0r);
-			svAcc10i = svmsb_m(p0, a1r, b0i, svAcc10i);
+			svAcc10i = svmls_m(p0, svAcc10i, a1r, b0i);
 
 			if (nr > 1)
 			{
@@ -167,7 +167,7 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 				svAcc11r = svmla_m(p0, svAcc11r, a1r, b1r);
 				svAcc11r = svmla_m(p0, svAcc11r, a1i, b1i);
 				svAcc11i = svmla_m(p0, svAcc11i, a1i, b1r);
-				svAcc11i = svmsb_m(p0, a1r, b1i, svAcc11i);
+				svAcc11i = svmls_m(p0, svAcc11i, a1r, b1i);
 			}
 		}
 	}
