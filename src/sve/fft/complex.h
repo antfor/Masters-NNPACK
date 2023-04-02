@@ -12,13 +12,9 @@
 #include <sve/fft/soa.h>
 #include <nnpack/hwinfo.h>
 
-
-
 //                      _256
 static inline void sve_fft8x8_complex(
-    const float t[restrict static 16 * 4],
-    float f[restrict static 16 * 4],
-    size_t f_stride)
+    float tf[restrict static 16 * 4])
 {
 
     const uint32_t BLOCK_SIZE = 8;
@@ -30,9 +26,8 @@ static inline void sve_fft8x8_complex(
     svbool_t pg, pg_load;
     svfloat32_t b, a, new_b, new_a, new_bt;
 
-    const int simd_width = nnp_hwinfo.simd_width; 
-  //  const uint64_t numVals = qa * 2; // a and b
-    const int dim = 2; //complex number 
+    const int simd_width = nnp_hwinfo.simd_width;
+    const int dim = 2;                       // complex number
     const uint64_t numVals = svcntw() * dim; // a and b
 
     const svuint32_t ind_zip = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
@@ -40,71 +35,66 @@ static inline void sve_fft8x8_complex(
     const svuint32_t ind_high = index4(4, 5, 6, 7, 8);
     const svuint32_t ind_even = index4(0, 1, 4, 5, 8);
     const svuint32_t ind_odd = index4(2, 3, 6, 7, 8);
-    // const svuint32_t ind_load = index8(0, 8, 1, 9, 2, 10, 3, 11, 16);
-    const int to_bytes = 4; 
+
+    const int to_bytes = 4;
     const svuint32_t ind_load = index8(to_bytes * 0, to_bytes * 8, to_bytes * 1, to_bytes * 9, to_bytes * 2, to_bytes * 10, to_bytes * 3, to_bytes * 11, to_bytes * 16);
-    
-     //const svuint32_t offsets = index8(4 * f_stride * 0 + 0, 4 * f_stride * 0 + 4, 4 * f_stride * 1 + 0, 4 * f_stride * 1 + 4, 4 * f_stride * 2 + 0, 4 * f_stride * 2 + 4, 4 * f_stride * 3 + 0, 4 * f_stride * 3 + 4, 4 * f_stride * BLOCK_SIZE);
-     const svuint32_t offsets = soa_offset(simd_width, f_stride, BLOCK_SIZE);
+    const svuint32_t ind_store = index8(to_bytes * 0,to_bytes *1,to_bytes *2,to_bytes *3,to_bytes *4,to_bytes *5,to_bytes *6,to_bytes *7,to_bytes *16); 
 
     for (uint32_t i = 0; i < LENGTH; i += numVals)
     {
 
-        pg = svwhilelt_b32_s32(i / dim, LENGTH / dim);
-        pg_load = svzip1_b32(pg, pg); // svwhilelt_b32_s32(i, LENGTH);
+        pg = svwhilelt_b32_s32(i/dim, LENGTH / dim);
+        pg_load = svzip1_b32(pg, pg);
 
-        a = svld1_gather_offset(pg_load, t + i, ind_load);
-        b = svld1_gather_offset(pg_load, t + i + BLOCK_SIZE / 2, ind_load);
+        a = svld1_gather_offset(pg_load, tf + i, ind_load);
+        b = svld1_gather_offset(pg_load, tf + i + BLOCK_SIZE / 2, ind_load);
 
         // stage1
         butterfly(&pg, &a, &b, &new_a, &new_b);
-        cmul_twiddle(&pg, &new_b, &twiddle_1, &new_bt);
+        cmulc_twiddle(&pg, &new_b, &twiddle_1, &new_bt);
         suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
 
         // stage2
         butterfly(&pg, &a, &b, &new_a, &new_b);
-        cmul_twiddle(&pg, &new_b, &twiddle_2, &new_bt);
+        cmulc_twiddle(&pg, &new_b, &twiddle_2, &new_bt);
         suffle(&pg, &new_a, &new_bt, &ind_even, &ind_odd, &ind_zip, &a, &b);
 
         // stage3
         butterfly(&pg, &a, &b, &new_a, &new_b);
 
         // store
-        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + 0, offsets, new_a);
-        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + f_stride * 4, offsets, new_b);
-        svst1_scatter_offset(pg_load, f + i / simd_width / 2 * f_stride + 0, offsets, new_a);
-        svst1_scatter_offset(pg_load, f + i / simd_width / 2 * f_stride + f_stride * BLOCK_SIZE/2/simd_width + BLOCK_SIZE % (simd_width * 2), offsets, new_b);
+        svst1_scatter_offset(pg_load, tf + i  + 0, ind_store, new_a);
+        svst1_scatter_offset(pg_load, tf + i  + BLOCK_SIZE, ind_store, new_b);
+
     }
 }
 
-
 static inline void sve_ifft8x8_complex(
-    const float t[restrict static 16 * 4],
-    float f[restrict static 16 * 4],
-    size_t f_stride)
+    float tf[restrict static 16 * 4])
 {
 
     const uint32_t BLOCK_SIZE = 8;
     const uint32_t LENGTH = BLOCK_SIZE * BLOCK_SIZE;
 
-    const svfloat32_t scaled_twiddle_1 = svzip1(svdupq_f32(0.0125f * COS_0PI_OVER_4, 0.0125f * COS_1PI_OVER_4, 0.0125f * COS_2PI_OVER_4, 0.0125f * COS_3PI_OVER_4), svdupq_f32(0.0125f * SIN_0PI_OVER_4, 0.0125f * SIN_1PI_OVER_4, 0.0125f * SIN_2PI_OVER_4, 0.0125f * SIN_3PI_OVER_4));
+    const svfloat32_t scaled_twiddle_1 = svzip1(svdupq_f32(0.125f * COS_0PI_OVER_4, 0.125f * COS_1PI_OVER_4, 0.125f * COS_2PI_OVER_4, 0.125f * COS_3PI_OVER_4), svdupq_f32(0.125f * SIN_0PI_OVER_4, 0.125f * SIN_1PI_OVER_4, 0.125f * SIN_2PI_OVER_4, 0.125f * SIN_3PI_OVER_4));
     const svfloat32_t twiddle_2 = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
 
     svbool_t pg, pg_load;
     svfloat32_t b, a, new_b, new_a, new_bt;
 
-    const int simd_width = nnp_hwinfo.simd_width; 
-  //  const uint64_t numVals = qa * 2; // a and b
-    const int dim = 2; //complex number 
+    const int simd_width = nnp_hwinfo.simd_width;
+    
+    const int dim = 2;                       // complex number
     const uint64_t numVals = svcntw() * dim; // a and b
 
-    const svuint32_t ind_zip = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
+    const svuint32_t ind_zip_interleave = index8(0, 2, 1, 3, 4, 6, 5, 7, 8);
+    const svuint32_t ind_zip_concat = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
     const svuint32_t ind_low = index4(0, 1, 2, 3, 8);
     const svuint32_t ind_high = index4(4, 5, 6, 7, 8);
-    const svuint32_t ind_even = index4(0, 1, 4, 5, 8);
-    const svuint32_t ind_odd = index4(2, 3, 6, 7, 8);
     
-    const svuint32_t offsets = soa_offset(simd_width, f_stride, BLOCK_SIZE);
+    const int to_bytes = 4;
+    const svuint32_t offsets = index8(to_bytes * 0, to_bytes * 32, to_bytes * 1, to_bytes * 33, to_bytes * 2, to_bytes * 34, to_bytes * 3, to_bytes * 35, to_bytes * 8);
+    //const svuint32_t offsets = index8(to_bytes * 0, to_bytes * 8, to_bytes * 1, to_bytes * 9, to_bytes * 2, to_bytes * 10, to_bytes * 3, to_bytes * 11, to_bytes * 16);
 
     for (uint32_t i = 0; i < LENGTH; i += numVals)
     {
@@ -112,30 +102,26 @@ static inline void sve_ifft8x8_complex(
         pg = svwhilelt_b32_s32(i / dim, LENGTH / dim);
         pg_load = svzip1_b32(pg, pg); // svwhilelt_b32_s32(i, LENGTH);
 
-        a = svld1_gather_offset(pg_load, t + i, offsets);
-        b = svld1_gather_offset(pg_load, t + i + BLOCK_SIZE / 2, offsets);
+        a = svld1_gather_offset(pg_load, tf + i/2, offsets);
+        b = svld1_gather_offset(pg_load, tf + i/2 + BLOCK_SIZE/2, offsets);
 
         // stage3
         butterfly(&pg, &a, &b, &new_a, &new_b);
 
         // stage2
-        //suffle(&pg, &new_a, &new_bt, &ind_even, &ind_odd, &ind_zip, &a, &b);
-        a = svzip1(new_a, new_b);
-        b = svzip2(new_a, new_b);
+        suffle(&pg, &new_a, &new_b, &ind_low, &ind_high, &ind_zip_interleave, &a, &b);
         cmul_twiddle(&pg, &b, &twiddle_2, &new_bt);
         butterfly(&pg, &a, &new_bt, &new_a, &new_b);
-        
+
         // stage1
-        suffle(&pg, &new_a, &new_b, &ind_low, &ind_high, &ind_zip, &a, &b);
+        suffle(&pg, &new_a, &new_b, &ind_low, &ind_high, &ind_zip_concat, &a, &b);
         cmul_twiddle(&pg, &b, &scaled_twiddle_1, &new_bt);
-        a = svmul_m(pg, a, svdup_f32(0.0125f));
+        a = svmul_m(pg, a, svdup_f32(0.125f));
         butterfly(&pg, &a, &new_bt, &new_a, &new_b);
 
         // store
-        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + 0, offsets, new_a);
-        //svst1_scatter_offset(pg_load, f + i / 2 * f_stride + f_stride * 4, offsets, new_b);
-        svst1(pg_load, f + i, new_a);
-        svst1(pg_load, f + i + LENGTH / 2, new_b); 
+        svst1(pg_load, tf + i/2, new_a);
+        svst1(pg_load, tf + i/2 + LENGTH/2, new_b);
     }
 }
 

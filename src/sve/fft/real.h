@@ -43,7 +43,7 @@ inline static void fft4xNr(
 
 		// stage1
 		butterfly(&pg, &a, &b, &new_a, &new_b);
-		cmul_twiddle(&pg, &new_b, &twiddle, &new_bt);
+		cmulc_twiddle(&pg, &new_b, &twiddle, &new_bt);
 		suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
 
 		// stage2
@@ -180,62 +180,128 @@ static inline void sve_fft8xN_real(
 }
 
 
-static inline void sve_ifft8xN_real(
-	const float t0[restrict static 1],
-	const float t4[restrict static 1],
-	size_t stride_t,
-	uint32_t row_offset, uint32_t row_count,
-	float f[restrict static 1],
-	size_t stride_f,
-	const uint32_t column_count)
-{
-	float w[8 * column_count];
+static inline void stuff_for_ifft8x8(float block[restrict static 1], uint32_t column_count){
 
-	//ifft4xNr(t0, t4, stride_t, row_offset, row_count, w, column_count);
+	svbool_t pg, pg_real_active, pg_imag_active;
+	svfloat32_t sv_w0, sv_w1, sv_w2, sv_w3;
+	svfloat32_t W0, W1, W2, W3;
+	svfloat32_t G1, H1, H_MP;
 
-	//stuff_real8_needs_to_do_sve(w, column_count, f, stride_f);
+	const uint32_t BLOCK_SIZE = 8;
+	const uint32_t HALF_BLOCK_SIZE = 4;
+	const uint32_t BLOCK_SIZEx2 = 16;
+
+	const uint64_t numVals = svcntw() / 2;
+	
+	const svbool_t real_active = svdupq_b32(1, 0, 1, 0);
+	const svbool_t imag_active = svdupq_b32(0, 1, 0, 1);
+	
+	const svfloat32_t half = svdup_f32(0.5f);
+	const svfloat32_t to_conjugate = svdupq_f32(1.0f,-1.0f, 1.0f,-1.0f);
+	const svfloat32_t sqrt2_over_2 = svdup_f32(SQRT2_OVER_2);
+
+	for (uint32_t column = 0; column < column_count; column += numVals)
+	{
+		pg = svwhilelt_b32(column * 2, column_count * 2);
+		pg_real_active = svmov_z(pg, real_active);
+		pg_imag_active = svmov_z(pg, imag_active);
+
+		sv_w0 = svld1(pg, block + column * 2 + BLOCK_SIZEx2 * 0);
+		sv_w1 = svld1(pg, block + column * 2 + BLOCK_SIZEx2 * 1);
+		sv_w2 = svld1(pg, block + column * 2 + BLOCK_SIZEx2 * 2);
+		sv_w3 = svld1(pg, block + column * 2 + BLOCK_SIZEx2 * 3);
+
+		W0 = svmul_m(pg, sv_w0, half);
+		W0 = svcadd_m(pg, W0, W0, 270);
+		W0 = svmul_m(pg, W0, to_conjugate);
+
+		W2 = svmul_m(pg, sv_w2, to_conjugate);
+
+		W1 = svmul_m(pg, sv_w1, half);
+		W3 = svmul_m(pg, sv_w3, half);
+
+
+		G1 = svadd_f32_m(pg_real_active, W1, W3); 
+		G1 = svsub_f32_m(pg_imag_active, G1, W3); // G1 = iw1 + iw3 because merge
+
+		H1 = svsub_f32_m(pg_real_active, W1, W3); 
+		H1 = svadd_f32_m(pg_imag_active, H1, W3); 
+
+		H_MP = svcadd_m(pg, H1, H1, 90);
+		H_MP = svmul_m(pg, H_MP, sqrt2_over_2);
+
+		W1 = svcadd_m(pg, G1, H_MP, 90);
+		W3 = svcadd_m(pg, G1, H_MP, 270);
+		W3 = svmul_m(pg, W3, to_conjugate); 
+
+		//store
+		svst1(pg, block + BLOCK_SIZEx2 * 0 + column * 2, W0);
+		svst1(pg, block + BLOCK_SIZEx2 * 1 + column * 2, W1);
+		svst1(pg, block + BLOCK_SIZEx2 * 2 + column * 2, W2);
+		svst1(pg, block + BLOCK_SIZEx2 * 3 + column * 2, W3);
+
+	}
 }
 
-static inline void scalar_fft8_real(
-	const float t0[restrict static 4],
-	const float t4[restrict static 4],
-	size_t stride_t,
-	uint32_t row_offset, uint32_t row_count,
-	float f[restrict static 1],
-	size_t stride_f)
+static inline void ifft4xNc(	
+	float block[restrict static 1],
+	uint32_t column_count)
 {
-	float w[8];
-	sve_fft4_aos(t0, t4, stride_t, row_offset, row_count, w);
 
-	const float half = 0.5f;
-	const float g1r = half * (w[2] + w[6]);
-	const float g1i = half * (w[3] - w[7]);
-	const float two_h1r = w[3] + w[7];
-	const float two_h1i = w[6] - w[2];
+	const uint32_t BLOCK_SIZE = 8;
+	const uint32_t HALF_BLOCK_SIZE = 4;
+	const uint32_t HALF_BLOCK_LENGTH = 32;
 
-	const float sqrt2_over_4 = SQRT2_OVER_4;
-	const float h1_plus = sqrt2_over_4 * (two_h1i + two_h1r);
-	const float h1_minus = sqrt2_over_4 * (two_h1i - two_h1r);
+	const svfloat32_t scaled_twiddle = svdupq_f32(0.25f * COS_0PI_OVER_2, 0.25f * SIN_0PI_OVER_2, 0.25f * COS_1PI_OVER_2, 0.25f * SIN_1PI_OVER_2);
 
-	const float f0 = w[0] + w[1];
-	const float f4 = w[0] - w[1];
-	const float f1r = g1r + h1_plus;
-	const float f1i = h1_minus + g1i;
-	const float f2r = w[4];
-	const float f2i = -w[5];
-	const float f3r = g1r - h1_plus;
-	const float f3i = h1_minus - g1i;
+	svbool_t pg;
+	svfloat32_t a, b, new_a, new_b, new_bt;
 
-	/* Store outputs */
-	f[0 * stride_f] = f0;
-	f[1 * stride_f] = f4;
-	f[2 * stride_f] = f1r;
-	f[3 * stride_f] = f1i;
-	f[4 * stride_f] = f2r;
-	f[5 * stride_f] = f2i;
-	f[6 * stride_f] = f3r;
-	f[7 * stride_f] = f3i;
+	const float to_byte = sizeof(float); 
+	const svuint32_t offsets = index4(to_byte * 0, to_byte * 1, to_byte * 16, to_byte * 17, to_byte * 2);
+	const svfloat32_t scale = svdup_f32(0.25f);
+	const uint64_t numVals = svcntw() / 4;
+
+	const svuint32_t ind_zip = index4(0, 2, 1, 3, 4);
+	const svuint32_t ind_low = index2(0, 1, 4);
+	const svuint32_t ind_high = index2(2, 3, 4);
+
+	for(uint32_t column = 0; column < column_count; column += numVals){
+
+		pg = svwhilelt_b32_s32(column * 4, column_count * 4);
+
+		// load
+		a = svld1_gather_offset(pg, block + column * 2 + 0, offsets);
+		b = svld1_gather_offset(pg, block + column * 2 + HALF_BLOCK_LENGTH, offsets);
+
+		// stage1
+		butterfly(&pg, &a, &b, &new_a, &new_b);
+		cmulc_twiddle(&pg, &new_b, &scaled_twiddle, &new_bt);
+		new_a = svmul_m(pg, new_a, scale);
+		suffle(&pg, &new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b);
+
+		// stage2
+		butterfly(&pg, &a, &b, &new_a, &new_b);
+
+		// store
+		svst1_scatter_offset(pg, block + column * 2 + 0 , offsets, new_a);
+		svst1_scatter_offset(pg, block + column * 2 + HALF_BLOCK_LENGTH, offsets, new_b);
+
+	}
 }
+
+
+static inline void sve_ifft8x8_real(
+	float block[restrict static 1],
+	uint32_t column_count)
+{
+	zip_rows_8(block); // todo try and remove
+	stuff_for_ifft8x8(block, column_count);
+	ifft4xNc(block, column_count);
+}
+
+
+//todo remove
 
 static inline void scalar_fft16_real(
 	const float t0[restrict static 8],
@@ -304,46 +370,6 @@ static inline void scalar_fft16_real(
 	f[13 * stride_f] = f6i;
 	f[14 * stride_f] = f7r;
 	f[15 * stride_f] = f7i;
-}
-
-static inline void scalar_ifft8_real(
-	float f0, float f4, float f1r, float f1i, float f2r, float f2i, float f3r, float f3i,
-	float t0[restrict static 4],
-	float t4[restrict static 4],
-	size_t stride_t)
-{
-	/* Load inputs and scale */
-	const float scale = 0.5f;
-	f0 *= scale;
-	f4 *= scale;
-	f1r *= scale;
-	f1i *= scale;
-	f3r *= scale;
-	f3i *= scale;
-
-	float w[8];
-
-	w[0] = f0 + f4;
-	w[1] = f0 - f4;
-	w[4] = f2r;
-	w[5] = -f2i;
-
-	const float g1r = f1r + f3r;
-	const float g1i = f1i - f3i;
-
-	const float h1r = f1r - f3r;
-	const float h1i = f1i + f3i;
-
-	const float h1_plus = h1r + h1i;
-	const float h1_minus = h1r - h1i;
-
-	const float sqrt2_over2 = SQRT2_OVER_2;
-	w[2] = g1r - sqrt2_over2 * h1_plus;
-	w[3] = g1i + sqrt2_over2 * h1_minus;
-	w[6] = g1r + sqrt2_over2 * h1_plus;
-	w[7] = -g1i + sqrt2_over2 * h1_minus;
-
-	sve_ifft4_aos(w, t0, t4, stride_t);
 }
 
 static inline void scalar_ifft16_real(

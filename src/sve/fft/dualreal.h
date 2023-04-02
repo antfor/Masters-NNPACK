@@ -3,123 +3,113 @@
 #include <nnpack/fft-constants.h>
 #include <sve/fft/soa.h>
 #include <arm_sve.h>
+#include <nnpack/hwinfo.h>
 
 
-static inline void sve_ifft8x8_dualreal(float transform[restrict static 16], size_t transform_stride){
 
-	size_t offset = 0;
+
+static inline void sve_fft8x8_dualreal(float block[restrict static 16]){
+	float w[16] = {block[0], block[2],
+				   block[4], block[6], 
+				   block[8], block[10],
+				   block[12], block[14],
+				   block[1], block[3],
+				   block[5], block[7],
+				   block[9], block[11],
+				   block[13], block[15]}; 
+
+	block[0] = w[0];
+	block[1] = w[4];
 	
-	float x0 = transform[0 + offset];
-	float x4 = transform[1 + offset]; 
-	offset += transform_stride;
-	float y0 = transform[0 + offset];
-	float y4 = transform[1 + offset];
-	offset += transform_stride;
-	float x1r = transform[0 + offset];
-	float x1i = transform[1 + offset];
-	offset += transform_stride;
-	float y1r = transform[0 + offset];
-	float y1i = transform[1 + offset];
-	offset += transform_stride;
-	float x2r = transform[0 + offset];
-	float x2i = transform[1 + offset];
-	offset += transform_stride;
-	float y2r = transform[0 + offset];
-	float y2i = transform[1 + offset];
-	offset += transform_stride;
-	float x3r = transform[0 + offset];
-	float x3i = transform[1 + offset];
-	offset += transform_stride;
-	float y3r = transform[0 + offset];
-	float y3i = transform[1 + offset];
+	block[2] = w[8];
+	block[3] = w[12]; 
+	
+	block[4] = 0.5f * (w[1] + w[7]);
+	block[5] = 0.5f * (w[9] - w[15]);
+	
+	block[6] = 0.5f * (w[9] + w[15]);
+	block[7] = 0.5f * (w[7] - w[1]);
+	
+	block[8] = 0.5f * (w[2] + w[6]);
+	block[9] = 0.5f * (w[10] - w[14]);
+	
+	block[10] = 0.5f * (w[10] + w[14]);
+	block[11] = 0.5f * (w[6] - w[2]);
+	
+	block[12] = 0.5f * (w[3] + w[5]);
+	block[13] = 0.5f * (w[11] - w[13]);
+	
+	block[14] = 0.5f * (w[11] + w[13]);
+	block[15] = 0.5f * (w[5] - w[3]);
+
+}
+
+static inline void sve_ifft8x8_dualreal(const float transform[restrict static 1], size_t transform_stride, float block[restrict static 64]){
+	
+	// Load rows
+	const uint32_t HALF_BLOCK_LENGTH = 32;
+	const uint32_t simd_width = nnp_hwinfo.simd_width;
+
+	svbool_t pg;
+	const uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
+	const uint32_t jumps = (HALF_BLOCK_LENGTH + jump - 1)/jump; //round up
+	const svbool_t vlen = svwhilelt_b32_s32(0, jump); 
+	
+	for(uint32_t i = 0; i < jumps; i++){
+		pg = svwhilelt_b32_s32(i * jump, HALF_BLOCK_LENGTH);
+		pg = svmov_z(pg, vlen);
+		
+		const svfloat32_t real = svld1(pg, transform); 
+		const svfloat32_t imag = svld1(pg, transform + jump); 
+		
+		svst1(pg, block + i * jump + 0, real);
+		svst1(pg, block + i * jump + HALF_BLOCK_LENGTH, imag);
+
+		transform += transform_stride;
+	}
+
+	// stuff
+	float x0 = block[0 + 0];
+	float x4 = block[0 + HALF_BLOCK_LENGTH]; 
+	float y0 = block[1 + 0];
+	float y4 = block[1 + HALF_BLOCK_LENGTH];
+	float x1r = block[2 + 0];
+	float x1i = block[2 + HALF_BLOCK_LENGTH];
+	float y1r = block[3 + 0];
+	float y1i = block[3 + HALF_BLOCK_LENGTH];
+
+	float x2r = block[4 + 0];
+	float x2i = block[4 + HALF_BLOCK_LENGTH];
+	float y2r = block[5 + 0];
+	float y2i = block[5 + HALF_BLOCK_LENGTH];
+	float x3r = block[6 + 0];
+	float x3i = block[6 + HALF_BLOCK_LENGTH];
+	float y3r = block[7 + 0];
+	float y3i = block[7 + HALF_BLOCK_LENGTH];
 	
 
-	transform[0] = x0;
-	transform[1] = y0;
-	transform += transform_stride;
-	transform[0] = x1r - y1i;
-	transform[1] = x1i + y1r;
-	transform += transform_stride;
-	transform[0] = x2r - y2i;
-	transform[1] = x2i + y2r;
-	transform += transform_stride;
-	transform[0] = x3r - y3i;
-	transform[1] = x3i + y3r;
-	transform += transform_stride;
-	transform[0] = x4;
-	transform[1] = y4;
-	transform += transform_stride;
-	transform[0] = y3i + x3r;
-	transform[1] = y3r - x3i;
-	transform += transform_stride;
-	transform[0] = y2i + x2r;
-	transform[1] = y2r - x2i;
-	transform += transform_stride;
-	transform[0] = y1i + x1r;
-	transform[1] = y1r - x1i;
+	block[0 + 0] = x0;
+	block[0 + HALF_BLOCK_LENGTH] = y0;
+	block[1 + 0] = x1r - y1i;
+	block[1 + HALF_BLOCK_LENGTH] = x1i + y1r;
+	block[2 + 0] = x2r - y2i;
+	block[2 + HALF_BLOCK_LENGTH] = x2i + y2r;
+	block[3 + 0] = x3r - y3i;
+	block[3 + HALF_BLOCK_LENGTH] = x3i + y3r;
+	block[4 + 0] = x4;
+	block[4 + HALF_BLOCK_LENGTH] = y4;
+	block[5 + 0] = y3i + x3r;
+	block[5 + HALF_BLOCK_LENGTH] = y3r - x3i;
+	block[6 + 0] = y2i + x2r;
+	block[6 + HALF_BLOCK_LENGTH] = y2r - x2i;
+	block[7 + 0] = y1i + x1r;
+	block[7 + HALF_BLOCK_LENGTH] = y1r - x1i;
+	
 
 }
 
 
-static inline void sve_fft8x8_dualreal(float transform[restrict static 16], size_t transform_stride){
-
-	float w[16] = {0.0f};
-	size_t offset = 0;
-	
-	w[0] = transform[0 + offset];
-	w[0+8] = transform[1 + offset];
-	offset += transform_stride;
-	w[1] = transform[0 + offset];
-	w[1+8] = transform[1 + offset];
-	offset += transform_stride;
-	w[2] = transform[0 + offset];
-	w[2+8] = transform[1 + offset];
-	offset += transform_stride;
-	w[3] = transform[0 + offset];
-	w[3+8] = transform[1 + offset];
-	offset += transform_stride;
-	w[4] = transform[0 + offset];
-	w[4+8] = transform[1 + offset];
-	offset += transform_stride;
-	w[5] = transform[0 + offset];
-	w[5+8] = transform[1 + offset];
-	offset += transform_stride;
-	w[6] = transform[0 + offset];
-	w[6+8] = transform[1 + offset];
-	offset += transform_stride;
-	w[7] = transform[0 + offset];
-	w[7+8] = transform[1 + offset];
-	
-
-	transform[0] = w[0];
-	transform[1] = w[4];
-	transform += transform_stride;
-	transform[0] = w[8];
-	transform[1] = w[12];
-	transform += transform_stride;
-	transform[0] = 0.5f * (w[1] + w[7]);
-	transform[1] = 0.5f * (w[9] - w[15]);
-	transform += transform_stride;
-	transform[0] = 0.5f * (w[9] + w[15]);
-	transform[1] = 0.5f * (w[7] - w[1]);
-	transform += transform_stride;
-	transform[0] = 0.5f * (w[2] + w[6]);
-	transform[1] = 0.5f * (w[10] - w[14]);
-	transform += transform_stride;
-	transform[0] = 0.5f * (w[10] + w[14]);
-	transform[1] = 0.5f * (w[6] - w[2]);
-	transform += transform_stride;
-	transform[0] = 0.5f * (w[3] + w[5]);
-	transform[1] = 0.5f * (w[11] - w[13]);
-	transform += transform_stride;
-	transform[0] = 0.5f * (w[11] + w[13]);
-	transform[1] = 0.5f * (w[5] - w[3]);
-
-}
-
-
-
-
+//todo remove scalar
 
 static inline void scalar_fft8_dualreal(
 	const float seq[restrict static 16],

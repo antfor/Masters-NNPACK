@@ -5,45 +5,7 @@
 
 #include <sve/fft/fft-util.h>
 #include <sve/fft/sve-print.h>
-//#include <sve/fft/complex.h>
 
-
-inline static svuint32_t soa_offset(int n, size_t stride, int BLOCK_SIZE)
-{
-	n = n*2;
-    int off[BLOCK_SIZE];
-	const int num_strides = BLOCK_SIZE/n;
-	const int N = imin(BLOCK_SIZE, n);
-	const int to_byte = 4;
-
-	int j = 0;
-	do{
-
-		for(int i = 0; i < N; i++ ){
-			off[i + j * N] = to_byte * (i + j * stride);
-		}
-
-		j++;
-		
-	}while(j < num_strides);
-
-
-	const int jump = to_byte * imax(BLOCK_SIZE * 2, num_strides * stride * 2);
-
-
-	return indexN(&off[0], BLOCK_SIZE, jump);
-
-}
-
-/*
-static inline void sve_fft8x8_soa(
-	const float t[restrict static 16*4],
-	float f[restrict static 16*4],
-	size_t f_stride)
-{
-	fft8x8c(t,f,f_stride);
-}
-*/
 
 static inline void scalar_fft8_soa(
 	const float t[restrict static 16],

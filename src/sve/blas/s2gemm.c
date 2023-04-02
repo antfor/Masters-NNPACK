@@ -1,14 +1,11 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <arm_sve.h>
-#include <stdio.h>
-#include <stddef.h>
-#include <stdbool.h>
 #include <nnpack/hwinfo.h>
+#include <sve/fft/fft-util.h>
+#include <sve/fft/sve-print.h>
 
-
-
-void nnp_cVLgemm_conjb_only_2x2__sve(
+void nnp_sVLc2gemm_conjb_only_2x2__sve(
 	size_t k, size_t update,
 	const float A[restrict static 1],
 	const float B[restrict static 1],
@@ -29,8 +26,13 @@ void nnp_cVLgemm_conjb_only_2x2__sve(
 	svfloat32_t svAcc10i = svdup_f32(0.0f);
 	svfloat32_t svAcc11i = svdup_f32(0.0f);
 
-	const size_t simd_width = nnp_hwinfo.simd_width; //4;						  // svcntw(); //todo fix
-	const svbool_t p0 = svwhilelt_b32_s32(0, simd_width); // svptrue_b32();
+	const size_t simd_width = nnp_hwinfo.simd_width; // max(npp_hwinfo.simd_width, BLOCK_SIZE * BLOCK_SIZE / 2);
+	const svbool_t p0 = svwhilelt_b32_s32(0, simd_width);
+	const svbool_t all = svptrue_b32();
+
+	uint32_t num_real_values = imin(2, simd_width); //scalar wants 1
+	const svbool_t p2 = svnand_z(all, p0, svwhilelt_b32_s32(0, num_real_values));
+
 
 	for (int i = 0; i < k; i++)
 	{
@@ -48,24 +50,33 @@ void nnp_cVLgemm_conjb_only_2x2__sve(
 		b1i = svld1(p0, B + i * simd_width * 4 + simd_width * 3);
 
 		svAcc00r = svmla_m(p0, svAcc00r, a0r, b0r);
-		svAcc00r = svmla_m(p0, svAcc00r, a0i, b0i);
-		svAcc00i = svmla_m(p0, svAcc00i, a0i, b0r);
-		svAcc00i = svmsb_m(p0, a0r, b0i, svAcc00i);
+		svAcc00r = svmla_m(p2, svAcc00r, a0i, b0i);
 
 		svAcc01r = svmla_m(p0, svAcc01r, a0r, b1r);
-		svAcc01r = svmla_m(p0, svAcc01r, a0i, b1i);
-		svAcc01i = svmla_m(p0, svAcc01i, a0i, b1r);
-		svAcc01i = svmsb_m(p0, a0r, b1i, svAcc01i);
+		svAcc01r = svmla_m(p2, svAcc01r, a0i, b1i);
 
 		svAcc10r = svmla_m(p0, svAcc10r, a1r, b0r);
-		svAcc10r = svmla_m(p0, svAcc10r, a1i, b0i);
-		svAcc10i = svmla_m(p0, svAcc10i, a1i, b0r);
-		svAcc10i = svmsb_m(p0, a1r, b0i, svAcc10i);
+		svAcc10r = svmla_m(p2, svAcc10r, a1i, b0i);
 
 		svAcc11r = svmla_m(p0, svAcc11r, a1r, b1r);
-		svAcc11r = svmla_m(p0, svAcc11r, a1i, b1i);
+		svAcc11r = svmla_m(p2, svAcc11r, a1i, b1i);
+
+
+
+		b0r = svsel(p2, b0r, b0i);
+		b1r = svsel(p2, b1r, b1i);
+
+		svAcc00i = svmla_m(p0, svAcc00i, a0i, b0r);
+		svAcc00i = svmls_m(p2, svAcc00i, a0r, b0i);
+
+		svAcc01i = svmla_m(p0, svAcc01i, a0i, b1r);
+		svAcc01i = svmls_m(p2, svAcc01i, a0r, b1i);
+
+		svAcc10i = svmla_m(p0, svAcc10i, a1i, b0r);
+		svAcc10i = svmls_m(p2, svAcc10i, a1r, b0i);
+
 		svAcc11i = svmla_m(p0, svAcc11i, a1i, b1r);
-		svAcc11i = svmsb_m(p0, a1r, b1i, svAcc11i);
+		svAcc11i = svmls_m(p2, svAcc11i, a1r, b1i);
 	}
 
 	if (update != 0)
@@ -96,7 +107,9 @@ void nnp_cVLgemm_conjb_only_2x2__sve(
 	}
 }
 
-void nnp_cVLgemm_conjb_upto_2x2__sve(
+
+
+void nnp_sVLc2gemm_conjb_upto_2x2__sve(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
 	const float A[restrict static 1],
@@ -118,8 +131,13 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 	svfloat32_t svAcc10i = svdup_f32(0.0f);
 	svfloat32_t svAcc11i = svdup_f32(0.0f);
 
-	const size_t simd_width = nnp_hwinfo.simd_width; //4;						  // svcntw(); //todo fix
-	const svbool_t p0 = svwhilelt_b32_s32(0, simd_width); // svptrue_b32();
+	const size_t simd_width = nnp_hwinfo.simd_width; //todo fix
+	const svbool_t p0 = svwhilelt_b32_s32(0, simd_width); 
+	const svbool_t all = svptrue_b32();
+
+	uint32_t num_real_values = imin(2, simd_width); //scalar wants 1
+
+	const svbool_t p2 = svnand_z(all, p0, svwhilelt_b32_s32(0, num_real_values));
 
 	int lenA = mr * 2; // 2 for complex
 	int lenB = nr * 2; 
@@ -132,11 +150,11 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 
 		b0r = svld1(p0, B + i * simd_width * lenB + simd_width * 0);
 		b0i = svld1(p0, B + i * simd_width * lenB + simd_width * 1);
+		
 
 		svAcc00r = svmla_m(p0, svAcc00r, a0r, b0r);
-		svAcc00r = svmla_m(p0, svAcc00r, a0i, b0i);
-		svAcc00i = svmla_m(p0, svAcc00i, a0i, b0r);
-		svAcc00i = svmsb_m(p0, a0r, b0i, svAcc00i);
+		svAcc00r = svmla_m(p2, svAcc00r, a0i, b0i);
+		
 
 		if (nr > 1)
 		{
@@ -144,10 +162,12 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 			b1r = svld1(p0, B + i * simd_width * lenB + simd_width * 2);
 			b1i = svld1(p0, B + i * simd_width * lenB + simd_width * 3);
 
+			
+			
+
 			svAcc01r = svmla_m(p0, svAcc01r, a0r, b1r);
-			svAcc01r = svmla_m(p0, svAcc01r, a0i, b1i);
-			svAcc01i = svmla_m(p0, svAcc01i, a0i, b1r);
-			svAcc01i = svmsb_m(p0, a0r, b1i, svAcc01i);
+			svAcc01r = svmla_m(p2, svAcc01r, a0i, b1i);
+
 		}
 
 		if (mr > 1)
@@ -156,20 +176,48 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 			a1r = svld1(p0, A + i * simd_width * lenA + simd_width * 2);
 			a1i = svld1(p0, A + i * simd_width * lenA + simd_width * 3);
 
+			
+			
+
 			svAcc10r = svmla_m(p0, svAcc10r, a1r, b0r);
-			svAcc10r = svmla_m(p0, svAcc10r, a1i, b0i);
+			svAcc10r = svmla_m(p2, svAcc10r, a1i, b0i);
+
+			if (nr > 1)
+			{
+				svAcc11r = svmla_m(p0, svAcc11r, a1r, b1r);
+				svAcc11r = svmla_m(p2, svAcc11r, a1i, b1i);
+			}
+		}
+
+		//todo use SPLICE?
+		b0r = svsel(p2, b0r, b0i);
+		b1r = svsel(p2, b1r, b1i);
+
+		svAcc00i = svmla_m(p0, svAcc00i, a0i, b0r);
+		svAcc00i = svmls_m(p2, svAcc00i, a0r, b0i);
+
+		if (nr > 1)
+		{
+
+			svAcc01i = svmla_m(p0, svAcc01i, a0i, b1r);
+			svAcc01i = svmls_m(p2, svAcc01i, a0r, b1i);
+		}
+
+		if (mr > 1)
+		{
+
 			svAcc10i = svmla_m(p0, svAcc10i, a1i, b0r);
-			svAcc10i = svmsb_m(p0, a1r, b0i, svAcc10i);
+			svAcc10i = svmls_m(p2, svAcc10i, a1r, b0i);
 
 			if (nr > 1)
 			{
 
-				svAcc11r = svmla_m(p0, svAcc11r, a1r, b1r);
-				svAcc11r = svmla_m(p0, svAcc11r, a1i, b1i);
 				svAcc11i = svmla_m(p0, svAcc11i, a1i, b1r);
-				svAcc11i = svmsb_m(p0, a1r, b1i, svAcc11i);
+				svAcc11i = svmls_m(p2, svAcc11i, a1r, b1i);
 			}
 		}
+
+
 	}
 
 	if (update != 0)
@@ -217,25 +265,24 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 }
 
 
-//----------------------------------------------------------------------
-
-void nnp_cgemm_conjb_only_2x2__scalar(
+void nnp_s2gemm_only_2x2__scalar(
 	size_t k, size_t update,
-	const float A[restrict static 1],
-	const float B[restrict static 1],
-	float C[restrict static 1],
-	size_t row_stride_c)
-{
-	nnp_cVLgemm_conjb_only_2x2__sve(k, update, A, B, C, row_stride_c);
-}
-
-void nnp_cgemm_conjb_upto_2x2__scalar(
-	uint32_t mr, uint32_t nr,
-	size_t k, size_t update,
-	const float A[restrict static 1],
-	const float B[restrict static 1],
+	const float a[restrict static 1],
+	const float b[restrict static 1],
 	float c[restrict static 1],
 	size_t row_stride_c)
 {
-	nnp_cVLgemm_conjb_upto_2x2__sve(mr, nr, k, update, A, B, c, row_stride_c);
+	nnp_sVLc2gemm_conjb_only_2x2__sve(k, update, a, b, c, row_stride_c);
 }
+
+void nnp_s2gemm_upto_2x2__scalar(
+	uint32_t mr, uint32_t nr,
+	size_t k, size_t update,
+	const float a[restrict static 1],
+	const float b[restrict static 1],
+	float c[restrict static 1],
+	size_t row_stride_c)
+{
+	nnp_sVLc2gemm_conjb_upto_2x2__sve(mr, nr, k, update, a, b, c, row_stride_c);
+}
+
