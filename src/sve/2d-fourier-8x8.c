@@ -123,7 +123,36 @@ void nnp_ifft8x8_with_bias_with_relu__sve(
 	size_t transform_stride, size_t data_stride,
 	uint32_t row_count, uint32_t column_count)
 {
+
+	transform_stride /= sizeof(float);
+	const int simd_width = nnp_hwinfo.simd_width;
+
+	float block[BLOCK_SIZE*BLOCK_SIZE];
+
+	sve_ifft8x8_dualreal(transform, transform_stride, block);
+
+	block[0] += (*bias) * 64.0f;
+
+	sve_ifft8x8_complex(block);
+
+	sve_ifft8x8_real(block, column_count);
 	
+	//todo vectorize
+	const uint32_t rows[8] = {0,0,6,6,4,4,2,2};
+	//real numbers
+	for (size_t row = 0; row < row_count; row+=2) {
+		for (size_t column = 0; column < column_count; column++) {
+			data[row * data_stride + column] = relu(block[rows[row] * BLOCK_SIZE + 2 * column + 0], 0);
+		}
+	}
+
+	//imag numbers
+	for (size_t row = 1; row < row_count; row+=2) {
+		for (size_t column = 0; column < column_count; column++) {
+			data[row * data_stride + column] = relu(block[rows[row] * BLOCK_SIZE + 2 * column + 1], 0);
+		}
+	}
+
 }
 
 

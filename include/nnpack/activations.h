@@ -44,3 +44,15 @@ static inline float grad_relu(float grad_output_data, float input_data, float ne
 		return vbsl_f32(negative_mask, vmul_f32(grad_output_data, negative_slope), grad_output_data);
 	}
 #endif
+
+#ifdef NNP_BACKEND_SVE
+
+	#include <arm_sve.h>
+
+
+	static inline svfloat32_t sve_relu0_f32(svbool_t pg, svfloat32_t data) {
+		return svmul_m(pg, svcnot(pg, svlsr_m(pg, svreinterpret_u32(data), 31)), data);
+	}
+
+
+#endif

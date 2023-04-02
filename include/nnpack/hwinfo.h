@@ -36,9 +36,7 @@ struct cache_blocking_info {
 	size_t l4;
 };
 
-#if NNP_BACKEND_SVE
-	#define NNP_COMPLEX_TUPLE_INDEX 1 
-#elif NNP_BACKEND_SCALAR
+#if NNP_BACKEND_SCALAR
 	#define NNP_COMPLEX_TUPLE_INDEX 2
 #else
 	#define NNP_COMPLEX_TUPLE_INDEX 1
