@@ -55,6 +55,86 @@ inline static void fft4xNr(
 	}
 }
 
+static inline void stuff_for_fft8x8_sve(
+	const float w[restrict static 1],
+	uint32_t column_count,
+	float f[restrict static 1],
+	size_t stride_f)
+{
+	svbool_t pg, pg_real_active, pg_imag_active;
+	svfloat32_t sv_w0, sv_w1, sv_w2, sv_w3;
+	svfloat32_t W0, W1, W2, W3;
+	svfloat32_t G1, H1, H_MP;
+
+	const uint32_t BLOCK_SIZE = 8;
+	const uint32_t HALF_BLOCK_SIZE = 4;
+	const uint32_t BLOCK_SIZEx2 = 16;
+
+	const uint64_t numVals = svcntw() / 2;
+	
+	const svbool_t real_active = svdupq_b32(1, 0, 1, 0);
+	const svbool_t imag_active = svdupq_b32(0, 1, 0, 1);
+	
+	const svfloat32_t half = svdup_f32(0.5f);
+	const svfloat32_t to_conjugate = svdupq_f32(1.0f,-1.0f, 1.0f,-1.0f);
+	const svfloat32_t neg_sqrt2_over_4 = svdup_f32(-SQRT2_OVER_4);
+	const svfloat32_t zero = svdup_f32(0.0f);
+	const uint32_t to_byte = sizeof(float);
+	const svuint32_t ind_load = index2(to_byte * 0 ,to_byte * 1 , to_byte * 8);
+	const svuint32_t ind_store = index2(to_byte * 0 ,to_byte * 8 , to_byte * 1);
+
+	for (uint32_t column = 0; column < column_count; column += numVals)
+	{
+		pg = svwhilelt_b32(column * 2, column_count * 2);
+		pg_real_active = svmov_z(pg, real_active);
+		pg_imag_active = svmov_z(pg, imag_active);
+
+		sv_w0 = svld1_gather_offset(pg, w + 0 + column * BLOCK_SIZE, ind_load);
+		sv_w1 = svld1_gather_offset(pg, w + 2 + column * BLOCK_SIZE, ind_load);
+		sv_w2 = svld1_gather_offset(pg, w + 4 + column * BLOCK_SIZE, ind_load);
+		sv_w3 = svld1_gather_offset(pg, w + 6 + column * BLOCK_SIZE, ind_load);
+
+		W0 = svcadd_m(pg, sv_w0, sv_w0, 270);
+		W0 = svmul_m(pg, W0, to_conjugate);
+
+		W2 = svmul_m(pg, sv_w2, to_conjugate);
+
+
+		W1 = sv_w1;
+		W3 = sv_w3;
+
+		G1 = svadd_f32_m(pg_real_active, W1, W3); 
+		G1 = svsub_f32_m(pg_imag_active, G1, W3); // G1 = iw1 + iw3 because merge
+		G1 = svmul_m(pg, G1, half);
+
+		H1 = svsub_f32_m(pg_real_active, W3, W1); 
+		H1 = svadd_f32_m(pg_imag_active, H1, W1); 
+		H1 = svcadd_m(pg, zero, H1, 270);
+		H1 = svmul_m(pg, H1, to_conjugate);
+
+		H_MP = svcadd_m(pg, H1, H1, 90);
+		H_MP = svmul_m(pg, H_MP, neg_sqrt2_over_4);
+
+
+		W1 = svcadd_m(pg, G1, H_MP, 90);
+		W3 = svcadd_m(pg, G1, H_MP, 270);
+		W3 = svmul_m(pg, W3, to_conjugate); 
+
+		//store
+		//svst1(pg, f + 0 * stride_f + column * 2, W0);
+		//svst1(pg, f + 2 * stride_f + column * 2, W1);
+		//svst1(pg, f + 4 * stride_f + column * 2, W2);
+		//svst1(pg, f + 6 * stride_f + column * 2, W3);
+
+		//todo use svst1
+		svst1_scatter_offset(pg, f + 0 * stride_f + column, ind_store, W0);
+		svst1_scatter_offset(pg, f + 2 * stride_f + column, ind_store, W1);
+		svst1_scatter_offset(pg, f + 4 * stride_f + column, ind_store, W2);
+		svst1_scatter_offset(pg, f + 6 * stride_f + column, ind_store, W3);
+
+	}
+}
+
 static inline void stuff_real8_needs_to_do_sve(
 	const float w[restrict static 1],
 	uint32_t column_count,
@@ -176,7 +256,7 @@ static inline void sve_fft8xN_real(
 
 	fft4xNr(t0, t4, stride_t, row_offset, row_count, w, column_count);
 
-	stuff_real8_needs_to_do_sve(w, column_count, f, stride_f);
+	stuff_for_fft8x8_sve(w, column_count, f, stride_f);
 }
 
 
