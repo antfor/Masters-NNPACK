@@ -13,9 +13,10 @@
 #include <nnpack/relu.h>
 #include <nnpack/softmax.h>
 
-#if NNP_BACKEND_SVE
+#if NNP_BACKEND_SVE || NNP_BACKEND_SCALAR
 #include <arm_sve.h>
 #endif
+#include <stdio.h>
 
 struct hardware_info nnp_hwinfo = { };
 static pthread_once_t hwinfo_init_control = PTHREAD_ONCE_INIT;
@@ -516,12 +517,13 @@ static void init_hwinfo(void) {
 			};
 			nnp_hwinfo.supported = cpuinfo_has_arm_neon();
 		#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE
-			#if NNP_BACKEND_SVE
+			#if NNP_BACKEND_SVE || NNP_BACKEND_SCALAR
 				nnp_hwinfo.simd_width = svcntw();
+				printf("SVE width: %d\n", nnp_hwinfo.simd_width);
 			#else
 				nnp_hwinfo.simd_width = 1;
+				printf("hej: %d\n", nnp_hwinfo.simd_width);
 			#endif
-			
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_store = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_stream = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 #if !NNP_INFERENCE_ONLY
