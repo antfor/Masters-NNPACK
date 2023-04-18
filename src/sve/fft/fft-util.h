@@ -51,6 +51,24 @@ static inline void suffle(svbool_t *pg, svfloat32_t *a, svfloat32_t *b, const sv
     *new_b = svtbl(svzip1(svtbl(*a, *ind_b), svtbl(*b, *ind_b)), *ind_zip);
 }
 
+//--gemm--------------------------------------------------------------
+
+static inline void sumSplit(svbool_t pg, svfloat32_t *n, uint32_t split, uint32_t simd_width){
+
+    switch (split)
+    {
+    case 0 || 1: break;
+    case 2:
+        *n = svadd_x(pg, *n, svtbl(*n,svindex_u32(simd_width,1))); 
+        break;
+    default:
+        printf("Error: split value not implemented");
+        break;
+    }
+
+
+}
+
 //--ifft---------------------------------------------------------------
 
 static inline void zip_rows_8(float block[restrict static 1]){
@@ -102,6 +120,7 @@ static inline svuint32_t index8(uint32_t i0, uint32_t i1, uint32_t i2, uint32_t 
 }
 
 
+/*
 static inline svuint32_t indexN(uint32_t *ab, uint32_t N, uint32_t step){
 
     switch (N)
@@ -118,7 +137,21 @@ static inline svuint32_t indexN(uint32_t *ab, uint32_t N, uint32_t step){
         break;
     }
 }
+*/
 
+static inline svuint32_t indexN(svbool_t pg, int32_t start, int32_t stride, int32_t jump, int32_t N){
+
+/*
+	const svuint32_t ind_N = svindex_u32(start, stride);
+	const svuint32_t ind_div = svdiv_m(pg, ind_N, svdup_u32(N));
+	const svuint32_t ind_mul = svmul_m(pg, ind_div, svdup_u32(jump - N)); 
+
+	return svadd_m(pg, ind_mul, ind_N);
+
+*/
+    const svuint32_t ind_N = svindex_u32(start, stride);
+    return svadd_m(pg, svmul_m(pg, svdiv_m(pg, ind_N, svdup_u32(N)), svdup_u32(jump - N)), ind_N);
+}
 
 //----gp-utils-----------------------------------------------------------------
 
@@ -130,4 +163,8 @@ static inline int imin(int a, int b){
 static inline int imax(int a, int b){
 	return a > b ? a : b;
 }
+
+static inline int idiv_ceil(int a, int b){
+    return (a + b - 1) / b;
+} 
 

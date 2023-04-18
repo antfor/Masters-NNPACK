@@ -517,12 +517,11 @@ static void init_hwinfo(void) {
 			};
 			nnp_hwinfo.supported = cpuinfo_has_arm_neon();
 		#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE
-			#if NNP_BACKEND_SVE || NNP_BACKEND_SCALAR
+			#if NNP_BACKEND_SVE
 				nnp_hwinfo.simd_width = svcntw();
 				printf("SVE width: %d\n", nnp_hwinfo.simd_width);
 			#else
 				nnp_hwinfo.simd_width = 1;
-				printf("hej: %d\n", nnp_hwinfo.simd_width);
 			#endif
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_store = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_stream = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
@@ -589,10 +588,14 @@ static void init_hwinfo(void) {
 				.cX_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_only_2x2__scalar,
 				.cX_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_upto_2x2__scalar,
 #endif /* !NNP_INFERENCE_ONLY */
+			
 				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2__scalar,
 				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2__scalar,
 				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2__scalar,
 				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2__scalar,
+				#if NNP_BACKEND_SVE
+		
+				#endif
 #if !NNP_INFERENCE_ONLY
 				.s4cX_conjb_transc_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_transc_only_2x2__scalar,
 				.s4cX_conjb_transc_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_transc_upto_2x2__scalar,
