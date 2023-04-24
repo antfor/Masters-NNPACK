@@ -494,7 +494,7 @@ void nnp_cgemm_conjb_only_2x2__scalar(
 {
 	int max_simd_width = 32;
 
-	if(nnp_hwinfo.simd_width / max_simd_width  <= 2){
+	if(nnp_hwinfo.simd_width / max_simd_width  < 2){
 		nnp_cVLgemm_conjb_only_2x2__sve(k, update, A, B, C, row_stride_c, 32);
 	}else{
 		nnp_cVLgemm_conjb_only_2x2_Split__sve(k, update, A, B, C, row_stride_c, 32);
@@ -512,7 +512,7 @@ void nnp_cgemm_conjb_upto_2x2__scalar(
 	size_t row_stride_c)
 {
 	int max_simd_width = 32;
-	if(nnp_hwinfo.simd_width / max_simd_width  <= 2){
+	if(nnp_hwinfo.simd_width / max_simd_width  < 2){
 		nnp_cVLgemm_conjb_upto_2x2__sve(mr, nr, k, update, A, B, c, row_stride_c, 32);
 	}else{
 		nnp_cVLgemm_conjb_upto_2x2_Split__sve(mr, nr, k, update, A, B, c, row_stride_c, 32);
