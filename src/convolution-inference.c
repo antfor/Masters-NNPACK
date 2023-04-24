@@ -494,9 +494,12 @@ static enum nnp_status compute_fast_convolution_inference(
 	void* memory_block = NULL;
 	size_t memory_size = 0;
 	const size_t simd_width = nnp_hwinfo.simd_width;
-	const size_t tuple_elements = (fourier_transform ? simd_width * 2 : simd_width);
-	const size_t tuple_size = tuple_elements * transform_element_size;
+
 	const size_t tile_elements = tile_size.height * tile_size.width;
+	//const size_t tuple_elements = round_down_to_power_of_2(min((fourier_transform ? simd_width * 2 : simd_width), tile_elements));
+	const size_t tuple_elements = min((fourier_transform ? simd_width * 2 : simd_width), tile_elements);
+
+	const size_t tuple_size = tuple_elements * transform_element_size;
 	const size_t tuple_count = tile_elements / tuple_elements;
 
 	const struct nnp_size output_tile_size = {

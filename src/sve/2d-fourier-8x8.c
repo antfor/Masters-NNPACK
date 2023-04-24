@@ -18,26 +18,36 @@
 #define BLOCK_LENGTH 64
 #define HALF_BLOCK_LENGTH 32
 
+void complex_128(float block[BLOCK_LENGTH] ,float transform[restrict static 1], size_t transform_stride){
+	
+	sve_fft8x8_complex_128(block);
+	sve_fft8x8_dualreal_128(block);
 
+	//store
+	const uint32_t simd_width = nnp_hwinfo.simd_width;
+	float to_bytes = sizeof(float);
+	const svuint32_t ind_store = indexN(svptrue_b32(),0, 1, 8, 4); 
+	svbool_t pg;
+	uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
+	uint32_t jumps = (HALF_BLOCK_LENGTH + jump - 1)/jump; //round up
+	svbool_t vlen = svwhilelt_b32_s32(0, jump);
+	
+	for(uint32_t i = 0; i < jumps; i++){
+		pg = svwhilelt_b32_s32(i * jump, HALF_BLOCK_LENGTH);
+		pg = svmov_z(pg, vlen); 
+		
+		const svfloat32_t real = svld1_gather_index(pg, block + i * jump * 2 + 0 , ind_store); 
+		const svfloat32_t imag = svld1_gather_index(pg, block + i * jump * 2 + BLOCK_SIZE/2 , ind_store); 
 
-void nnp_fft8x8_with_offset__sve(
-	const float data[restrict static 1],
-	float transform[restrict static 1],
-	size_t data_stride, size_t transform_stride,
-	uint32_t row_count, uint32_t column_count,
-	uint32_t row_offset, uint32_t column_offset)
-{
+		svst1(pg, transform + 0, real);
+		svst1(pg, transform + jump, imag);
+		transform += transform_stride;
+	}
+}
 
-	transform_stride /= sizeof(float);
+void complex_256(float block[BLOCK_LENGTH] ,float transform[restrict static 1], size_t transform_stride){
 
-	float block[BLOCK_LENGTH] = {0.0f};
-
-	const float *restrict row0 = data;
-	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
-
-	sve_fft8xN_real(row0, row4, data_stride,row_offset, row_count, &block[column_offset], BLOCK_SIZE, column_count);
-
-	sve_fft8x8_complex(block); //todo can't handle odd VL
+	sve_fft8x8_complex(block);
 	sve_fft8x8_dualreal(block);
 
 	//store
@@ -60,8 +70,34 @@ void nnp_fft8x8_with_offset__sve(
 		svst1(pg, transform + jump, imag);
 		transform += transform_stride;
 	}
-
 }
+
+
+void nnp_fft8x8_with_offset__sve(
+	const float data[restrict static 1],
+	float transform[restrict static 1],
+	size_t data_stride, size_t transform_stride,
+	uint32_t row_count, uint32_t column_count,
+	uint32_t row_offset, uint32_t column_offset)
+{
+
+	transform_stride /= sizeof(float);
+
+	float block[BLOCK_LENGTH] = {0.0f};
+
+	const float *restrict row0 = data;
+	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
+
+    sve_fft8xN_real(row0, row4, data_stride,row_offset, row_count, &block[column_offset], BLOCK_SIZE, column_count);
+
+	if(nnp_hwinfo.simd_width % 2 == 0){
+		complex_256(block, transform, transform_stride);
+
+	}else{
+		complex_128(block, transform, transform_stride);
+	}
+}
+
 
 #if !NNP_INFERENCE_ONLY
 
@@ -94,7 +130,11 @@ void nnp_ifft8x8_with_bias__sve(
 
 	block[0] += (*bias) * 64.0f;
 
-	sve_ifft8x8_complex(block);
+	if(nnp_hwinfo.simd_width % 2 == 0){
+		sve_ifft8x8_complex(block);
+	}else{
+		sve_ifft8x8_complex_128(block);
+	}
 
 	sve_ifft8x8_real(block, column_count);
 	
@@ -133,7 +173,11 @@ void nnp_ifft8x8_with_bias_with_relu__sve(
 
 	block[0] += (*bias) * 64.0f;
 
-	sve_ifft8x8_complex(block);
+	if(nnp_hwinfo.simd_width % 2 == 0){
+		sve_ifft8x8_complex(block);
+	}else{
+		sve_ifft8x8_complex_128(block);
+	}
 
 	sve_ifft8x8_real(block, column_count);
 	

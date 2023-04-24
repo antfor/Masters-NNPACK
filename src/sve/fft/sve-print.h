@@ -82,6 +82,30 @@ static inline void print_array_f(float *arr, int n)
     printf("\n");
 }
 
+static inline void fprint_array_f(float *arr, int n, int m)
+{
+    for (int i = 0; i < n/m; i++){
+        for (int j = 0; j < m; j++)
+            printf("%f ", arr[i *m + j]);
+
+        printf("\n");
+    }
+        
+       
+
+   
+}
+
+static inline void print_transform(const float transform[restrict static 1], size_t transform_stride, uint32_t row_count, uint32_t column_count)
+{
+	for (uint32_t row = 0; row < row_count; row++) {
+		for (uint32_t column = 0; column < column_count; column++) {
+			printf("%f ", transform[row * transform_stride + column]);
+		}
+		printf("\n");
+	}
+}
+
 static inline void print_array_i(int *arr, int n)
 {
     for (int i = 0; i < n; i++)

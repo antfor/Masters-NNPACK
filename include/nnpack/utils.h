@@ -41,3 +41,14 @@ static inline size_t divide_round_up(size_t dividend, size_t divisor) {
 		return dividend / divisor + 1;
 	}
 }
+
+static inline size_t round_down_to_power_of_2(size_t number) {
+	
+	number |= number >> 1;
+    number |= number >> 2;
+    number |= number >> 4;
+    number |= number >> 8;
+    number |= number >> 16;
+ 
+    return number ^ (number >> 1);
+}

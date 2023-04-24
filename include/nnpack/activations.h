@@ -49,10 +49,11 @@ static inline float grad_relu(float grad_output_data, float input_data, float ne
 
 	#include <arm_sve.h>
 
+/*
 
 	static inline svfloat32_t sve_relu0_f32(svbool_t pg, svfloat32_t data) {
-		return svmul_m(pg, svcnot(pg, svlsr_m(pg, svreinterpret_u32(data), 31)), data);
+		return svmul_m(pg, svnot_x(pg, svlsr_m(pg, svreinterpret_u32(data), 31)), data);
 	}
 
-
+*/
 #endif

@@ -6,7 +6,41 @@
 #include <nnpack/hwinfo.h>
 
 
+static inline void sve_fft8x8_dualreal_128(float block[restrict static 16]){
+	float w[16] = {block[0], block[1],
+				   block[2], block[3], 
+				   block[8], block[9],
+				   block[10], block[11],
+				   block[4], block[5],
+				   block[6], block[7],
+				   block[12], block[13],
+				   block[14], block[15]}; 
 
+	block[0] = w[0];
+	block[4] = w[4];
+	
+	block[1] = w[8];
+	block[5] = w[12]; 
+	
+	block[2] = 0.5f * (w[1] + w[7]);
+	block[6] = 0.5f * (w[9] - w[15]);
+	
+	block[3] = 0.5f * (w[9] + w[15]);
+	block[7] = 0.5f * (w[7] - w[1]);
+	
+	block[8] = 0.5f * (w[2] + w[6]);
+	block[12] = 0.5f * (w[10] - w[14]);
+	
+	block[9] = 0.5f * (w[10] + w[14]);
+	block[13] = 0.5f * (w[6] - w[2]);
+	
+	block[10] = 0.5f * (w[3] + w[5]);
+	block[14] = 0.5f * (w[11] - w[13]);
+	
+	block[11] = 0.5f * (w[11] + w[13]);
+	block[15] = 0.5f * (w[5] - w[3]);
+
+}
 
 static inline void sve_fft8x8_dualreal(float block[restrict static 16]){
 	float w[16] = {block[0], block[2],
