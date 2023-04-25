@@ -383,6 +383,7 @@ SET(NNPACK_BACKEND_SRCS
     src/scalar/2d-winograd-8x8-3x3.c
     # Tuple GEMM
     src/sve/blas/s2gemm.c
+    src/scalar/blas/s2gemm.c
     src/sve/blas/cgemm-conjb.c
     # Direct convolution
     src/scalar/blas/conv1x1.c

@@ -151,6 +151,12 @@ struct cxgemm {
 	nnp_full_tuple_gemm_function s4cX_conjb_upto_mr_x_nr;
 	nnp_fast_tuple_gemm_function cX_conjb_only_mr_x_nr;
 	nnp_full_tuple_gemm_function cX_conjb_upto_mr_x_nr;
+	#if NNP_BACKEND_SVE
+	nnp_fast_tuple_gemm_function s4cX_conjb_only_mr_x_nr_2048;
+	nnp_full_tuple_gemm_function s4cX_conjb_upto_mr_x_nr_2048;
+	nnp_fast_tuple_gemm_function cX_conjb_only_mr_x_nr_2048;
+	nnp_full_tuple_gemm_function cX_conjb_upto_mr_x_nr_2048;
+	#endif
 #if !NNP_INFERENCE_ONLY
 	nnp_fast_tuple_gemm_function s4cX_conjb_transc_only_mr_x_nr;
 	nnp_full_tuple_gemm_function s4cX_conjb_transc_upto_mr_x_nr;

@@ -485,7 +485,7 @@ void nnp_cVLgemm_conjb_upto_2x2__sve(
 //----------------------------------------------------------------------
 
 //for fft8x8
-void nnp_cgemm_conjb_only_2x2__scalar(
+void nnp_cgemm_conjb_only_2x2__sve(
 	size_t k, size_t update,
 	const float A[restrict static 1],
 	const float B[restrict static 1],
@@ -503,7 +503,7 @@ void nnp_cgemm_conjb_only_2x2__scalar(
 }
 
 //for fft8x8
-void nnp_cgemm_conjb_upto_2x2__scalar(
+void nnp_cgemm_conjb_upto_2x2__sve(
 	uint32_t mr, uint32_t nr,
 	size_t k, size_t update,
 	const float A[restrict static 1],
@@ -517,4 +517,31 @@ void nnp_cgemm_conjb_upto_2x2__scalar(
 	}else{
 		nnp_cVLgemm_conjb_upto_2x2_Split__sve(mr, nr, k, update, A, B, c, row_stride_c, 32);
 	}
+}
+
+
+
+//for fft16x16
+void nnp_cgemm_conjb_only_2x2_2048__sve(
+	size_t k, size_t update,
+	const float A[restrict static 1],
+	const float B[restrict static 1],
+	float C[restrict static 1],
+	size_t row_stride_c)
+{
+
+	nnp_cVLgemm_conjb_only_2x2__sve(k, update, A, B, C, row_stride_c, 64);
+
+}
+
+//for fft16x16
+void nnp_cgemm_conjb_upto_2x2_2048__sve(
+	uint32_t mr, uint32_t nr,
+	size_t k, size_t update,
+	const float A[restrict static 1],
+	const float B[restrict static 1],
+	float c[restrict static 1],
+	size_t row_stride_c)
+{
+	nnp_cVLgemm_conjb_upto_2x2__sve(mr, nr, k, update, A, B, c, row_stride_c, 64);
 }
