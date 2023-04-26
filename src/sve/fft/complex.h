@@ -177,12 +177,12 @@ static inline void sve_fft8x8_complex(
     const svfloat32_t twiddle_1 = svzip1(svdupq_f32(COS_0PI_OVER_4, COS_1PI_OVER_4, COS_2PI_OVER_4, COS_3PI_OVER_4), svdupq_f32(SIN_0PI_OVER_4, SIN_1PI_OVER_4, SIN_2PI_OVER_4, SIN_3PI_OVER_4));
     const svfloat32_t twiddle_2 = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
 
-    svbool_t pg, pg_load;
+    svbool_t pg;
     svfloat32_t b, a, new_b, new_a, new_bt;
 
     const int simd_width = nnp_hwinfo.simd_width;
     const int dim = 2;                       // complex number
-    const uint64_t numVals = svcntw() * dim; // a and b
+    const uint64_t numVals = svcntw(); // a and b
 
     const svuint32_t ind_zip = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
     const svuint32_t ind_low = index4(0, 1, 2, 3, 8);
@@ -194,14 +194,13 @@ static inline void sve_fft8x8_complex(
     const svuint32_t ind_load = index8(to_bytes * 0, to_bytes * 8, to_bytes * 1, to_bytes * 9, to_bytes * 2, to_bytes * 10, to_bytes * 3, to_bytes * 11, to_bytes * 16);
     const svuint32_t ind_store = index8(to_bytes * 0,to_bytes *1,to_bytes *2,to_bytes *3,to_bytes *4,to_bytes *5,to_bytes *6,to_bytes *7,to_bytes *16); 
 
-    for (uint32_t i = 0; i < LENGTH; i += numVals)
+    for (uint32_t i = 0; i < LENGTH/dim; i += numVals)
     {
 
-        pg = svwhilelt_b32_s32(i/dim, LENGTH / dim);
-        pg_load = svzip1_b32(pg, pg);
-
-        a = svld1_gather_offset(pg_load, tf + i, ind_load);
-        b = svld1_gather_offset(pg_load, tf + i + BLOCK_SIZE / 2, ind_load);
+        pg = svwhilelt_b32_s32(i, LENGTH / dim);
+    
+        a = svld1_gather_offset(pg, tf + i * 2, ind_load);
+        b = svld1_gather_offset(pg, tf + i * 2 + BLOCK_SIZE / 2, ind_load);
 
         // stage1
         butterfly(&pg, &a, &b, &new_a, &new_b);
@@ -217,8 +216,8 @@ static inline void sve_fft8x8_complex(
         butterfly(&pg, &a, &b, &new_a, &new_b);
 
         // store
-        svst1_scatter_offset(pg_load, tf + i  + 0, ind_store, new_a);
-        svst1_scatter_offset(pg_load, tf + i  + BLOCK_SIZE, ind_store, new_b);
+        svst1_scatter_offset(pg, tf + i * 2 + 0, ind_store, new_a);
+        svst1_scatter_offset(pg, tf + i * 2 + BLOCK_SIZE, ind_store, new_b);
 
     }
 }
@@ -233,13 +232,13 @@ static inline void sve_ifft8x8_complex(
     const svfloat32_t scaled_twiddle_1 = svzip1(svdupq_f32(0.125f * COS_0PI_OVER_4, 0.125f * COS_1PI_OVER_4, 0.125f * COS_2PI_OVER_4, 0.125f * COS_3PI_OVER_4), svdupq_f32(0.125f * SIN_0PI_OVER_4, 0.125f * SIN_1PI_OVER_4, 0.125f * SIN_2PI_OVER_4, 0.125f * SIN_3PI_OVER_4));
     const svfloat32_t twiddle_2 = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
 
-    svbool_t pg, pg_load;
+    svbool_t pg;
     svfloat32_t b, a, new_b, new_a, new_bt;
 
     const int simd_width = nnp_hwinfo.simd_width;
     
     const int dim = 2;                       // complex number
-    const uint64_t numVals = svcntw() * dim; // a and b
+    const uint64_t numVals = svcntw();
 
     const svuint32_t ind_zip_interleave = index8(0, 2, 1, 3, 4, 6, 5, 7, 8);
     const svuint32_t ind_zip_concat = index8(0, 2, 4, 6, 1, 3, 5, 7, 8);
@@ -250,14 +249,13 @@ static inline void sve_ifft8x8_complex(
     const svuint32_t offsets = index8(to_bytes * 0, to_bytes * 32, to_bytes * 1, to_bytes * 33, to_bytes * 2, to_bytes * 34, to_bytes * 3, to_bytes * 35, to_bytes * 8);
     //const svuint32_t offsets = index8(to_bytes * 0, to_bytes * 8, to_bytes * 1, to_bytes * 9, to_bytes * 2, to_bytes * 10, to_bytes * 3, to_bytes * 11, to_bytes * 16);
 
-    for (uint32_t i = 0; i < LENGTH; i += numVals)
+    for (uint32_t i = 0; i < LENGTH/dim; i += numVals)
     {
 
-        pg = svwhilelt_b32_s32(i / dim, LENGTH / dim);
-        pg_load = svzip1_b32(pg, pg); // svwhilelt_b32_s32(i, LENGTH);
+        pg = svwhilelt_b32_s32(i, LENGTH / dim);
 
-        a = svld1_gather_offset(pg_load, tf + i/2, offsets);
-        b = svld1_gather_offset(pg_load, tf + i/2 + BLOCK_SIZE/2, offsets);
+        a = svld1_gather_offset(pg, tf + i, offsets);
+        b = svld1_gather_offset(pg, tf + i + BLOCK_SIZE/2, offsets);
 
         // stage3
         butterfly(&pg, &a, &b, &new_a, &new_b);
@@ -274,8 +272,8 @@ static inline void sve_ifft8x8_complex(
         butterfly(&pg, &a, &new_bt, &new_a, &new_b);
 
         // store
-        svst1(pg_load, tf + i/2, new_a);
-        svst1(pg_load, tf + i/2 + LENGTH/2, new_b);
+        svst1(pg, tf + i, new_a);
+        svst1(pg, tf + i + LENGTH/2, new_b);
     }
 }
 
