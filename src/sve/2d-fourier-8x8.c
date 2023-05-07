@@ -5,7 +5,6 @@
 
 #include <sve/fft/real.h>
 #include <sve/fft/complex.h> 
-#include <sve/fft/soa.h> 
 #include <sve/fft/dualreal.h>
 #include <sve/fft/sve-print.h>
 
@@ -65,7 +64,7 @@ void complex_256(float block[BLOCK_LENGTH] ,float transform[restrict static 1], 
 		
 		const svfloat32_t real = svld1_gather_offset(pg, block + i * jump * 2 + 0 , ind_store); 
 		const svfloat32_t imag = svld1_gather_offset(pg, block + i * jump * 2 + 1 , ind_store); 
-		
+
 		svst1(pg, transform + 0, real);
 		svst1(pg, transform + jump, imag);
 		transform += transform_stride;
@@ -90,12 +89,15 @@ void nnp_fft8x8_with_offset__sve(
 
     sve_fft8xN_real(row0, row4, data_stride,row_offset, row_count, &block[column_offset], BLOCK_SIZE, column_count);
 
-	if(nnp_hwinfo.simd_width % 2 == 0){
+	complex_256(block, transform, transform_stride);
+	/*
+	if(nnp_hwinfo.simd_width % 2 == 0 && 0){
 		complex_256(block, transform, transform_stride);
 
 	}else{
 		complex_128(block, transform, transform_stride);
 	}
+	*/
 }
 
 
@@ -130,11 +132,14 @@ void nnp_ifft8x8_with_bias__sve(
 
 	block[0] += (*bias) * 64.0f;
 
-	if(nnp_hwinfo.simd_width % 2 == 0){
+	sve_ifft8x8_complex(block);
+	/*
+	if(nnp_hwinfo.simd_width % 2 == 0 && 0){
 		sve_ifft8x8_complex(block);
 	}else{
 		sve_ifft8x8_complex_128(block);
 	}
+	*/
 
 	sve_ifft8x8_real(block, column_count);
 	
@@ -173,11 +178,14 @@ void nnp_ifft8x8_with_bias_with_relu__sve(
 
 	block[0] += (*bias) * 64.0f;
 
-	if(nnp_hwinfo.simd_width % 2 == 0){
+	sve_ifft8x8_complex(block);
+	/*
+	if(nnp_hwinfo.simd_width % 2 == 0 && 0){
 		sve_ifft8x8_complex(block);
 	}else{
 		sve_ifft8x8_complex_128(block);
 	}
+	*/
 
 	sve_ifft8x8_real(block, column_count);
 	

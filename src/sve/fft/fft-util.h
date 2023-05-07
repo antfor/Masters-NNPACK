@@ -120,37 +120,73 @@ static inline svuint32_t index8(uint32_t i0, uint32_t i1, uint32_t i2, uint32_t 
 }
 
 
-/*
-static inline svuint32_t indexN(uint32_t *ab, uint32_t N, uint32_t step){
-
-    switch (N)
-    {
-    case 2:
-        return index2(ab[0], ab[1], step);
-    case 4:
-        return index4(ab[0], ab[1], ab[2], ab[3], step);
-    case 8:
-        return index8(ab[0], ab[1], ab[2], ab[3], ab[4], ab[5], ab[6], ab[7], step);
-    default:
-        printf("indexN todo add index for N=%d\n", N);
-        exit(0.0);
-        break;
-    }
-}
-*/
-
+//todo fix
 static inline svuint32_t indexN(svbool_t pg, int32_t start, int32_t stride, int32_t jump, int32_t N){
 
 /*
 	const svuint32_t ind_N = svindex_u32(start, stride);
-	const svuint32_t ind_div = svdiv_m(pg, ind_N, svdup_u32(N));
-	const svuint32_t ind_mul = svmul_m(pg, ind_div, svdup_u32(jump - N)); 
+	const svuint32_t ind_div = svdiv_m(pg, ind_N, N * stride + start);
+	const svuint32_t ind_mul = svmul_m(pg, ind_div, jump - (N * stride))); 
 
 	return svadd_m(pg, ind_mul, ind_N);
 
 */
     const svuint32_t ind_N = svindex_u32(start, stride);
-    return svadd_m(pg, svmul_m(pg, svdiv_m(pg, ind_N, svdup_u32(N)), svdup_u32(jump - N)), ind_N);
+   // return svadd_m(pg, svmul_m(pg, svdiv_m(pg, ind_N, svdup_u32(N)), svdup_u32(jump - N)), ind_N);
+    return svadd_m(pg, svmul_m(pg, svdiv_m(pg, ind_N, N * stride + start), jump - (N * stride)), ind_N);
+}
+
+
+static inline svuint32_t indexA(svbool_t pg, uint32_t ind[restrict static 1], int N, int jump){
+    
+    const svuint32_t ind_N = svindex_u32(0, 1);
+    const svuint32_t div = svdiv_m(pg, ind_N, N);
+    const svuint32_t jumps = svmul_m(pg, div, jump);
+    const svuint32_t repeat = svadd_m(pg, svmul_m(pg, div, -N), ind_N);
+    const svuint32_t  load = svld1_gather_index(pg, ind , repeat); 
+
+    return svadd_m(pg, load, jumps);
+    //return svadd_m(pg, svld1_gather_index(pg, ind , svadd_m(pg, svmul_m(pg, div, jump - N), ind_N)), svmul_m(pg, div, jump)); 
+}
+
+//--zip---------------------------------------------------------------
+
+inline static svuint32_t zip_concat_16(svbool_t all){
+
+   svuint32_t con = indexN(all, 0, 1, 16, 2);
+   con = svzip1(con, svadd_m(all, con, 8));
+   con = svzip1(con, svadd_m(all, con, 4));
+   return svzip1(con, svadd_m(all, con, 2));
+}
+
+inline static svuint32_t zip_interleave_16(svbool_t all){
+    svuint32_t interleave = indexN(all, 0, 4, 16, 4);
+    interleave = svzip1(interleave, svadd_m(all, interleave, 1));
+    return svzip1(interleave, svadd_m(all, interleave, 2));
+}
+
+inline static svuint32_t zip_mix_16(svbool_t all){
+
+    svuint32_t mix = indexN(all, 0, 8, 16, 2);
+    mix = svzip1(mix, svadd_m(all, mix, 1));
+    mix = svzip1(mix, svadd_m(all, mix, 4));
+    return svzip1(mix, svadd_m(all, mix, 2));
+}
+
+inline static svuint32_t zip_concat_8(svbool_t all){
+
+   svuint32_t con = indexN(all, 0, 1, 8, 2);
+   con = svzip1(con, svadd_m(all, con, 4));
+   return svzip1(con, svadd_m(all, con, 2));
+
+}
+
+inline static svuint32_t zip_interleave_8(svbool_t all){
+
+    svuint32_t interleave = indexN(all, 0, 4, 8, 2);
+    interleave = svzip1(interleave, svadd_m(all, interleave, 1));
+    return svzip1(interleave, svadd_m(all, interleave, 2));
+   
 }
 
 //----gp-utils-----------------------------------------------------------------
@@ -167,4 +203,3 @@ static inline int imax(int a, int b){
 static inline int idiv_ceil(int a, int b){
     return (a + b - 1) / b;
 } 
-

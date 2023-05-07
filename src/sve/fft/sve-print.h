@@ -96,13 +96,15 @@ static inline void fprint_array_f(float *arr, int n, int m)
    
 }
 
-static inline void print_transform(const float transform[restrict static 1], size_t transform_stride, uint32_t row_count, uint32_t column_count)
+static inline void print_transform(float transform[restrict static 1], size_t transform_stride, uint32_t block_size, uint32_t simd_width)
 {
-	for (uint32_t row = 0; row < row_count; row++) {
-		for (uint32_t column = 0; column < column_count; column++) {
-			printf("%f ", transform[row * transform_stride + column]);
+    for (size_t row = 0; row < block_size; row += 2) {
+		for (size_t column = 0; column < block_size / simd_width; column += 1) {
+			print_array_f(transform, simd_width);
+            print_array_f(transform + simd_width, simd_width);
+			transform += transform_stride;
 		}
-		printf("\n");
+        printf("\n");
 	}
 }
 
