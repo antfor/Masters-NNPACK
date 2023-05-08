@@ -315,7 +315,7 @@ inline static void sve_fft16_complex_512(
 
     const svuint32_t ind_zip = zip_concat_16(all);
 
-    svuint32_t ind_index = indexN(all, 0, 1, 8, 16*2);
+    svuint32_t ind_index = indexN(all, 0, 1, 16*2, 8);
     ind_index = svzip1(ind_index ,svadd_m(all, ind_index, BLOCK_SIZE));
 
     for(int i =0; i < BLOCK_SIZE/2; i += numVals){
@@ -393,7 +393,7 @@ static inline void sve_ifft16x16_complex(
     ind_zip_mix = svzip1(ind_zip_mix, svadd_m(all, ind_zip_mix, 4));
     ind_zip_mix = svzip1(ind_zip_mix, svadd_m(all, ind_zip_mix, 2));
 
-    svuint32_t ind_index = indexN(all, 0, 1, 8, 16);
+    svuint32_t ind_index = indexN(all, 0, 1, 16, 8);
     ind_index = svzip1(ind_index ,svadd_m(all, ind_index, HALF_LENGTH));
 
     for(int i =0; i < BLOCK_SIZE/2; i += numVals)
@@ -424,8 +424,6 @@ static inline void sve_ifft16x16_complex(
         butterfly(&pg, &a, &new_bt, &new_a, &new_b);
 
         // store
-        //svst1(pg, tf + i * BLOCK_SIZE + 0, new_a);
-        //svst1(pg, tf + i * BLOCK_SIZE + HALF_LENGTH, new_b);
         svst1_scatter_index(pg, tf + i * BLOCK_SIZE + 0, ind_index, new_a);
         svst1_scatter_index(pg, tf + i * BLOCK_SIZE + BLOCK_SIZE/2, ind_index, new_b);
         

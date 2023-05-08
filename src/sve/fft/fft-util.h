@@ -6,8 +6,9 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdbool.h>
-
 #include<stdlib.h>
+
+#include <sve/fft/sve-print.h>
 
 
 //--fft--------------------------------------------------------------
@@ -120,20 +121,13 @@ static inline svuint32_t index8(uint32_t i0, uint32_t i1, uint32_t i2, uint32_t 
 }
 
 
-//todo fix
-static inline svuint32_t indexN(svbool_t pg, int32_t start, int32_t stride, int32_t jump, int32_t N){
+static inline svuint32_t indexN(svbool_t pg, uint32_t start, uint32_t stride, int32_t jump, uint32_t N){
 
-/*
-	const svuint32_t ind_N = svindex_u32(start, stride);
-	const svuint32_t ind_div = svdiv_m(pg, ind_N, N * stride + start);
-	const svuint32_t ind_mul = svmul_m(pg, ind_div, jump - (N * stride))); 
+	const svuint32_t ind_N = svindex_u32(0, stride);
+	const svuint32_t ind_div = svdiv_m(pg, ind_N, N * stride);
+	const svuint32_t ind_mul = svmul_m(pg, ind_div, jump - (N * stride)); 
 
-	return svadd_m(pg, ind_mul, ind_N);
-
-*/
-    const svuint32_t ind_N = svindex_u32(start, stride);
-   // return svadd_m(pg, svmul_m(pg, svdiv_m(pg, ind_N, svdup_u32(N)), svdup_u32(jump - N)), ind_N);
-    return svadd_m(pg, svmul_m(pg, svdiv_m(pg, ind_N, N * stride + start), jump - (N * stride)), ind_N);
+	return svadd_m(pg, svadd_m(pg, ind_mul, ind_N), start);
 }
 
 
@@ -146,7 +140,6 @@ static inline svuint32_t indexA(svbool_t pg, uint32_t ind[restrict static 1], in
     const svuint32_t  load = svld1_gather_index(pg, ind , repeat); 
 
     return svadd_m(pg, load, jumps);
-    //return svadd_m(pg, svld1_gather_index(pg, ind , svadd_m(pg, svmul_m(pg, div, jump - N), ind_N)), svmul_m(pg, div, jump)); 
 }
 
 //--zip---------------------------------------------------------------
