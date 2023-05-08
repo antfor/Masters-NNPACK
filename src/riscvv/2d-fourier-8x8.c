@@ -8,115 +8,30 @@
 #include <nnpack/utils.h>
 #include <nnpack/activations.h>
 
+#include <nnpack/hwinfo.h>
 
 #define BLOCK_SIZE 8
+#define BLOCK_LENGTH 64
+#define HALF_BLOCK_LENGTH 32
 
 
-void nnp_fft8x8_with_offset__scalar(
+void nnp_fft8x8_with_offset__riscvv(
 	const float data[restrict static 1],
 	float transform[restrict static 1],
 	size_t data_stride, size_t transform_stride,
 	uint32_t row_count, uint32_t column_count,
 	uint32_t row_offset, uint32_t column_offset)
 {
-	const uint32_t simd_width = 1;
 	transform_stride /= sizeof(float);
 
-	float block[BLOCK_SIZE][BLOCK_SIZE];
-	if (column_offset != 0) {
-		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
-			for (uint32_t column = 0; column < column_offset; column++) {
-				block[row][column] = 0.0f;
-			}
-		}
-	}
-
-	const uint32_t column_end = column_offset + column_count;
-	if (column_end != BLOCK_SIZE) {
-		for (uint32_t row = 0; row < BLOCK_SIZE; row++) {
-			for (uint32_t column = column_end; column < BLOCK_SIZE; column++) {
-				block[row][column] = 0.0f;
-			}
-		}
-	}
+	float block[BLOCK_LENGTH] = {0.0f};
 
 	const float *restrict row0 = data;
 	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
-	float* restrict output = &block[0][column_offset];
-	for (uint32_t column = column_offset; column < column_end; column++) {
-		scalar_fft8_real(row0, row4, data_stride,
-			row_offset, row_count,
-			&block[0][column], BLOCK_SIZE);
 
-		row0 += 1;
-		row4 += 1;
-		output += 1;
-	}
+	riscvv_fft8xN_real(row0, row4, data_stride, row_offset, row_count, &block[column_offset], BLOCK_SIZE, column_count);
 
-	{
-		float x0, y0, x1r, y1r, x2r, y2r, x3r, y3r;
-		float x4, y4, x1i, y1i, x2i, y2i, x3i, y3i;
-		scalar_fft8_dualreal(
-			&block[0][0],
-			&x0, &y0, &x1r, &y1r, &x2r, &y2r, &x3r, &y3r,
-			&x4, &y4, &x1i, &y1i, &x2i, &y2i, &x3i, &y3i);
-		transform[0] = x0;
-		transform[1] = x4;
-		transform += transform_stride;	
-		transform[0] = y0;
-		transform[1] = y4;
-		transform += transform_stride;	
-		transform[0] = x1r;
-		transform[1] = x1i;
-		transform += transform_stride;	
-		transform[0] = y1r;
-		transform[1] = y1i;
-		transform += transform_stride;	
-		transform[0] = x2r;
-		transform[1] = x2i;
-		transform += transform_stride;	
-		transform[0] = y2r;
-		transform[1] = y2i;
-		transform += transform_stride;	
-		transform[0] = x3r;
-		transform[1] = x3i;
-		transform += transform_stride;	
-		transform[0] = y3r;
-		transform[1] = y3i;
-		transform += transform_stride;	
-	}
-	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
-		float f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r;
-		float f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i;
-		scalar_fft8_soa(
-			&block[row][0],
-			&f0r, &f1r, &f2r, &f3r, &f4r, &f5r, &f6r, &f7r,
-			&f0i, &f1i, &f2i, &f3i, &f4i, &f5i, &f6i, &f7i);
-		transform[0] = f0r;
-		transform[1] = f0i;
-		transform += transform_stride;	
-		transform[0] = f1r;
-		transform[1] = f1i;
-		transform += transform_stride;	
-		transform[0] = f2r;
-		transform[1] = f2i;
-		transform += transform_stride;	
-		transform[0] = f3r;
-		transform[1] = f3i;
-		transform += transform_stride;	
-		transform[0] = f4r;
-		transform[1] = f4i;
-		transform += transform_stride;	
-		transform[0] = f5r;
-		transform[1] = f5i;
-		transform += transform_stride;	
-		transform[0] = f6r;
-		transform[1] = f6i;
-		transform += transform_stride;	
-		transform[0] = f7r;
-		transform[1] = f7i;
-		transform += transform_stride;	
-	}
+	complex_256(block, transform, transform_stride);
 }
 
 #if !NNP_INFERENCE_ONLY

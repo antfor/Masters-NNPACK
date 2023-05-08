@@ -2,7 +2,86 @@
 
 #include <nnpack/fft-constants.h>
 #include <riscvv/fft/aos.h>
+#include <riscvv/fft/fft-util.h>
+#include <riscvv/fft/complex.h>
 
+inline static void fft4xNr( 
+	const float t_lo[restrict static 1],
+	const float t_hi[restrict static 1],
+	size_t stride_t,
+	uint32_t row_start, uint32_t row_count,
+	float f[restrict static 1],
+	const uint32_t N)
+{
+
+	const uint32_t BLOCK_SIZE = 4;
+	const uint32_t LENGTH = BLOCK_SIZE * N;
+
+	__epi_2xi32 t_lo_offset, t_hi_offset;
+	__epi_2xi1 mask_a, mask_b;
+	__epi_2xf32 b, a, new_b, new_a, new_bt;
+
+	// Single Element Width = 32, LMUL = 1
+	// TODO: Investigate higher LMUL för longer vectors
+	// Should return amount of 32 bit values that fit in one vector
+	const uint64_t max_32 = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
+
+	// For the actual loops use gvl
+
+	const svfloat32_t twiddle = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
+
+    long gvl = __builtin_epi_vsetvl(max_32, __epi_e32, __epi_m1);
+
+	const __uint32_t zip[4] = {0, 2, 1, 3};
+	const __epi_2xi32 ind_zip = indexA(zip, 4, 4, gvl);
+	const __uint32_t low[2] = {0, 1};
+	const __epi_2xi32 ind_low = indexA(low, 2, 4, gvl);
+	const __uint32_t high[2] = {2, 3};
+	const __epi_2xi32 ind_high = indexA(high, 2, 4, gvl);
+	const __uint32_t store[4] = {0, 4, 8, 12};
+	const __epi_2xi32 ind_store = indexA(store, 4, 8 * 4, gvl);
+
+	aos4_pred_and_offset(row_start, row_count, stride_t, &mask_a, &mask_b, &t_lo_offset, &t_hi_offset, gvl);
+
+	for (uint32_t i = 0; i < LENGTH)
+	{
+		long gvl = __builtin_epi_vsetvl(min(max_32, LENGTH - max_32), __epi_e32, __epi_m1);
+
+		// load
+		a = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_lo + i / BLOCK_SIZE, t_lo_offset, mask_a, gvl);
+		b = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_hi + i / BLOCK_SIZE, t_hi_offset, mask_a, gvl);
+
+		// stage1
+		butterfly(&a, &b, &new_a, &new_b, gvl);
+		cmulc_twiddle(&new_b, &twiddle, &new_bt, gvl);
+		suffle(&new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b, gvl);
+
+		// stage2
+		butterfly(&pg, &a, &b, &new_a, &new_b);
+
+		// store
+		svst1_scatter_offset(pg, f + i * 2 + 0, ind_store, new_a);
+		svst1_scatter_offset(pg, f + i * 2 + 4, ind_store, new_b);
+
+		i += gvl;
+	}
+}
+
+static inline void riscvv_fft8xN_real(
+	const float t0[restrict static 1],
+	const float t4[restrict static 1],
+	size_t stride_t,
+	uint32_t row_offset, uint32_t row_count,
+	float f[restrict static 1],
+	size_t stride_f,
+	const uint32_t column_count)
+{
+	float w[8 * column_count];
+
+	fft4xNr(t0, t4, stride_t, row_offset, row_count, w, column_count);
+
+	stuff_for_fft8x8_sve(w, column_count, f, stride_f);
+}
 
 static inline void scalar_fft8_real(
 	const float t0[restrict static 4],
