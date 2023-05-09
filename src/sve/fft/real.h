@@ -384,7 +384,7 @@ static inline void sve_ifft8x8_real(
 //--16x16------------------------------------------------------------
 
 
-static inline void complex_to_real_NxNc_512(const float w[restrict static 1], float f[restrict static 1], uint32_t column_offset, uint32_t column_count, int N, svfloat32_t twiddle){
+static inline void complex_to_real_NxNc_512(const float w[restrict static 1], float f[restrict static 1], uint32_t column_offset, uint32_t column_count, int N, svfloat32_t twiddle_i){
 
 	const uint32_t BLOCK_SIZE = N/2;
 
@@ -416,15 +416,13 @@ static inline void complex_to_real_NxNc_512(const float w[restrict static 1], fl
 
 		xN_r = svmul_m(pg, xN_r, to_conjugate);
 
-		xe = svadd_m(pg, xN_r, xr);
+		xe = svadd_m(pg, xr, xN_r);
 		xe = svmul_m(pg, xe, 0.5f);
 
-
-		svfloat32_t dif = svsub_m(pg, xN_r, xr); // make input twiddle * i, thus we can skip this step 
-		cmul_twiddle(&pg, &dif, &i, &xo);
+		xo = svsub_m(pg, xr, xN_r);
 		xo = svmul_m(pg, xo, 0.5f);
 
-		cmulc_twiddle(&pg, &xo, &twiddle, &xot);
+		cmulc_twiddle(&pg, &xo, &twiddle_i, &xot);
 
 		x = svadd_m(pg, xe, xot);
 
@@ -453,10 +451,10 @@ static inline void sve_fft16_real(
 	fft8xNr(t0, t8, stride_t, row_offset, row_count, column_offset, column_count, w);
     
 	{
-	const svfloat32_t twiddle_top = svzip1(svdupq_f32(COS_1PI_OVER_8, COS_2PI_OVER_8, COS_3PI_OVER_8, COS_4PI_OVER_8), 
-							  	           svdupq_f32(SIN_1PI_OVER_8, SIN_2PI_OVER_8, SIN_3PI_OVER_8, SIN_4PI_OVER_8));
-	
-	complex_to_real_NxNc_512(w, f, column_offset, column_count, 16, twiddle_top);
+		const svfloat32_t twiddle_top_i = svzip1(svdupq_f32(-SIN_1PI_OVER_8, -SIN_2PI_OVER_8, -SIN_3PI_OVER_8, -SIN_4PI_OVER_8),
+									             svdupq_f32(COS_1PI_OVER_8, COS_2PI_OVER_8, COS_3PI_OVER_8, COS_4PI_OVER_8));
+
+		complex_to_real_NxNc_512(w, f, column_offset, column_count, 16, twiddle_top_i);
 	}
 
 	fftN_to_fft2N(w,8,f,16,column_offset,column_count);
@@ -482,7 +480,8 @@ static inline void icomplex_to_real_NxNc_512(const float f[restrict static 1], f
 
 
 	const svuint32_t ind_store_top = indexN(all, 2, 1, 16, 8);
-	const svuint32_t ind_store_bot = indexA(all, (uint32_t []){6,7,4,5,2,3,0,1}, 8, 16); // todo make indexN (something is wrong with indexN on this input)
+	//todo indexN?
+	const svuint32_t ind_store_bot = indexA(all, (uint32_t []){6,7,4,5,2,3,0,1}, 8, 16);
 
 	for(int column = 0; column < column_count; column+=numVals){
 
@@ -517,14 +516,13 @@ static inline void sve_ifft16x16_real(float block[restrict static 256], size_t c
 	float w[16 * column_count]; //todo make in place
 
 	{
-	const svfloat32_t twiddle_top_i = svzip1(svdupq_f32(-SIN_1PI_OVER_8, -SIN_2PI_OVER_8, -SIN_3PI_OVER_8, -SIN_4PI_OVER_8),
-									         svdupq_f32(COS_1PI_OVER_8, COS_2PI_OVER_8, COS_3PI_OVER_8, COS_4PI_OVER_8));
+		const svfloat32_t twiddle_top_i = svzip1(svdupq_f32(-SIN_1PI_OVER_8, -SIN_2PI_OVER_8, -SIN_3PI_OVER_8, -SIN_4PI_OVER_8),
+												svdupq_f32(COS_1PI_OVER_8, COS_2PI_OVER_8, COS_3PI_OVER_8, COS_4PI_OVER_8));
 
-	icomplex_to_real_NxNc_512(block, w, column_count, 16, twiddle_top_i);
+		icomplex_to_real_NxNc_512(block, w, column_count, 16, twiddle_top_i);
+	}
 
 	ifftN_to_ifft2N(block, 128, w, 16, column_count);
-
-	}
 
 	sve_ifft8xNr(w, block, column_count);
 

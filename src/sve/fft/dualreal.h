@@ -159,7 +159,6 @@ static inline void dualreal_Nbyte(float tf[restrict static 32], int N, int offse
 	const svfloat32_t half_conjugate = svdupq_f32(0.5f,-0.5f, 0.5f,-0.5f);
 	const svfloat32_t i = svdupq_f32(0.0f, 1.0f, 0.0f, 1.0f);
 	svfloat32_t xr, xN_r, Fr, Gr, dif;
-	Gr = svdup_f32(0.0f);
 	size_t numVals = svcntw()/N;
 
 	svuint32_t indr =   index2(0 + offset/2, N + offset/2, 1);
@@ -177,10 +176,8 @@ static inline void dualreal_Nbyte(float tf[restrict static 32], int N, int offse
 
 		Fr = svadd_m(pg, xN_r, xr);
 
-		const svfloat32_t dif  = svsub_m(pg, xN_r, xr);
-	    Gr =  svcmla_m(pg, Gr, i, dif, 0);
-        Gr =  svcmla_m(pg, Gr, i, dif, 90); 
-		//todo cmul_twiddle(&pg, &dif, &i, &Gr);
+		svfloat32_t dif  = svsub_m(pg, xN_r, xr);
+		cmul_twiddle(&pg, &dif, &i, &Gr);
 
 		//store
 		svst1(pg, tf + row + 0  + offset, svtrn1(Fr, Gr));

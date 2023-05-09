@@ -196,3 +196,25 @@ static inline int imax(int a, int b){
 static inline int idiv_ceil(int a, int b){
     return (a + b - 1) / b;
 } 
+
+
+//---suffle-index---------------------------------------------------------------------
+
+
+static inline void ind_octo(svbool_t pg, svuint32_t *ind_0, svuint32_t *ind_1 ){
+    *ind_0 = indexN(pg,0, 1, 16, 8);
+    *ind_1 = svadd_m(pg, *ind_0, 8);
+}
+
+static inline void ind_tetra(svbool_t pg, svuint32_t *ind_0, svuint32_t *ind_1 ){
+    svuint32_t quad = indexN(pg, 0, 8, 16, 2);
+    quad = svzip1(quad, svadd_m(pg, quad, 2));
+    *ind_0 = svzip1(quad, svadd_m(pg, quad, 1));
+    *ind_1 = svadd_m(pg, *ind_0, 4);
+}
+
+static inline void ind_duo(svbool_t pg, svuint32_t *ind_0, svuint32_t *ind_1 ){
+    const svuint32_t even = indexN(pg, 0, 4, 16, 4);
+    *ind_0 = svzip1(even, svadd_m(pg, even, 1));
+    *ind_1 = svadd_m(pg, *ind_0, 2);
+}

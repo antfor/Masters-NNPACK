@@ -300,18 +300,11 @@ inline static void sve_fft16_complex_512(
     int HALF_LENGTH = 128;
     const uint64_t numVals = svcntw()/BLOCK_SIZE;
 
-
-    const svuint32_t ind_octo_0 = indexN(all,0, 1, 16, 8);
-    const svuint32_t ind_octo_1 = svadd_m(all,ind_octo_0, 8);
-
-    svuint32_t quad = indexN(all, 0, 8, 16, 2);
-    quad = svzip1(quad, svadd_m(all, quad, 2));
-    const svuint32_t ind_tetra_0 = svzip1(quad, svadd_m(all, quad, 1));
-    const svuint32_t ind_tetra_1 = svadd_m(all, ind_tetra_0, 4);
-
-    const svuint32_t even = indexN(all, 0, 4, 16, 4);
-    const svuint32_t ind_duo_0 = svzip1(even, svadd_m(all, even, 1));
-    const svuint32_t ind_duo_1 = svadd_m(all, ind_duo_0, 2);
+    svuint32_t ind_octo_0, ind_octo_1, ind_tetra_0, ind_tetra_1, ind_duo_0, ind_duo_1;
+ 
+    ind_duo(all, &ind_duo_0, &ind_duo_1);
+    ind_tetra(all, &ind_tetra_0, &ind_tetra_1);
+    ind_octo(all, &ind_octo_0, &ind_octo_1);
 
     const svuint32_t ind_zip = zip_concat_16(all);
 
@@ -372,26 +365,14 @@ static inline void sve_ifft16x16_complex(
     int HALF_LENGTH = 128;
     const uint64_t numVals = svcntw()/BLOCK_SIZE;
 
-
-    const svuint32_t ind_octo_0 = indexN(all,0, 1, 16, 8);
-    const svuint32_t ind_octo_1 = svadd_m(all,ind_octo_0, 8);
-
-    svuint32_t quad = indexN(all, 0, 8, 16, 2);
-    quad = svzip1(quad, svadd_m(all, quad, 2));
-    const svuint32_t ind_tetra_0 = svzip1(quad, svadd_m(all, quad, 1));
-    const svuint32_t ind_tetra_1 = svadd_m(all, ind_tetra_0, 4);
-
+    svuint32_t ind_octo_0, ind_octo_1, ind_tetra_0, ind_tetra_1;
+ 
+    ind_tetra(all, &ind_tetra_0, &ind_tetra_1);
+    ind_octo(all, &ind_octo_0, &ind_octo_1);
 
     const svuint32_t ind_zip_concat = zip_concat_16(all);
-
-    svuint32_t interleave = indexN(all, 0, 4, 16, 4);
-    interleave = svzip1(interleave, svadd_m(all, interleave, 1));
-    const svuint32_t ind_zip_interleave = svzip1(interleave, svadd_m(all, interleave, 2));
-    
-    svuint32_t ind_zip_mix = indexN(all, 0, 8, 16, 2);
-    ind_zip_mix = svzip1(ind_zip_mix, svadd_m(all, ind_zip_mix, 1));
-    ind_zip_mix = svzip1(ind_zip_mix, svadd_m(all, ind_zip_mix, 4));
-    ind_zip_mix = svzip1(ind_zip_mix, svadd_m(all, ind_zip_mix, 2));
+    const svuint32_t ind_zip_interleave = zip_interleave_16(all);
+    const svuint32_t ind_zip_mix = zip_mix_16(all);
 
     svuint32_t ind_index = indexN(all, 0, 1, 16, 8);
     ind_index = svzip1(ind_index ,svadd_m(all, ind_index, HALF_LENGTH));
