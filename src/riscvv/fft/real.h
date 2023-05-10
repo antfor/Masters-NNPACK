@@ -17,47 +17,63 @@ inline static void fft4xNr(
 	const uint32_t BLOCK_SIZE = 4;
 	const uint32_t LENGTH = BLOCK_SIZE * N;
 
-	__epi_2xi32 t_lo_offset, t_hi_offset;
-	__epi_2xi1 mask_a, mask_b;
-	__epi_2xf32 b, a, new_b, new_a, new_bt;
-
-	// Single Element Width = 32, LMUL = 1
-	// TODO: Investigate higher LMUL för longer vectors
-	// Should return amount of 32 bit values that fit in one vector
 	const uint64_t max_32 = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
-
-	// For the actual loops use gvl
-
-	const svfloat32_t twiddle = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
 
     long gvl = __builtin_epi_vsetvl(max_32, __epi_e32, __epi_m1);
 
-	const __uint32_t zip[4] = {0, 2, 1, 3};
-	const __epi_2xi32 ind_zip = indexA(zip, 4, 4, gvl);
-	const __uint32_t low[2] = {0, 1};
-	const __epi_2xi32 ind_low = indexA(low, 2, 4, gvl);
-	const __uint32_t high[2] = {2, 3};
-	const __epi_2xi32 ind_high = indexA(high, 2, 4, gvl);
-	const __uint32_t store[4] = {0, 4, 8, 12};
-	const __epi_2xi32 ind_store = indexA(store, 4, 8 * 4, gvl);
+	//const __epi_2xi32 twiddle = dupq((uint32_t []){COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2}, gvl);
+	const __epi_2xi32 twiddle_r = dupq((uint32_t []){COS_0PI_OVER_2, COS_1PI_OVER_2, COS_0PI_OVER_2, COS_1PI_OVER_2}, gvl);
+	const __epi_2xi32 twiddle_i = dupq((uint32_t []){SIN_0PI_OVER_2, SIN_1PI_OVER_2, SIN_0PI_OVER_2, SIN_1PI_OVER_2}, gvl);
 
-	aos4_pred_and_offset(row_start, row_count, stride_t, &mask_a, &mask_b, &t_lo_offset, &t_hi_offset, gvl);
+	const __epi_2xi32 ind_zip   = indexA((uint32_t []){0, 2, 1, 3}, 4, 4, gvl);
+	const __epi_2xi32 ind_low   = indexA((uint32_t []){0, 1}, 2, 4, gvl);
+	const __epi_2xi32 ind_high  = indexA((uint32_t []){2, 3}, 2, 4, gvl);
+	const __epi_2xi32 ind_store = indexA((uint32_t []){0, 4, 8, 12}, 4, 8 * 4, gvl);
+
+	// Offsets and masks
+
+    const uint32_t row_end = row_start + row_count;
+    const bool a_pred[4] = {row_start <= 0, row_start <= 1, row_start <= 2, row_start <= 3};
+	__epi_2xi32 t_lo_offset_r = aos4_offset_r(&a_pred, stride_t, gvl);
+	__epi_2xi32 t_lo_offset_i = aos4_offset_i(&a_pred, stride_t, gvl);
+
+    const bool b_pred[4] = {row_start <= 4 && row_end > 4, row_start <= 5 && row_end > 5, row_start <= 6 && row_end > 6, row_start <= 7 && row_end > 7};
+	__epi_2xi32 t_hi_offset_r = aos4_offset_r(&b_pred, stride_t, gvl);
+	__epi_2xi32 t_hi_offset_i = aos4_offset_i(&b_pred, stride_t, gvl);
+
+    bool no_jump[8];
+	jump_arr(&no_jump, &a_pred, &b_pred);
+
+	__epi_2xi1 mask_a_r = aos4_mask_a_r(&no_jump, &a_pred, &b_pred, gvl);
+	__epi_2xi1 mask_a_i = aos4_mask_a_i(&no_jump, &a_pred, &b_pred, gvl);
+	__epi_2xi1 mask_b_r = aos4_mask_b_r(&no_jump, &a_pred, &b_pred, gvl);
+	__epi_2xi1 mask_b_i = aos4_mask_b_i(&no_jump, &a_pred, &b_pred, gvl);
 
 	for (uint32_t i = 0; i < LENGTH)
 	{
 		long gvl = __builtin_epi_vsetvl(min(max_32, LENGTH - max_32), __epi_e32, __epi_m1);
 
 		// load
-		a = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_lo + i / BLOCK_SIZE, t_lo_offset, mask_a, gvl);
-		b = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_hi + i / BLOCK_SIZE, t_hi_offset, mask_a, gvl);
+		__epi_2xi32 a_r = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_lo + i / BLOCK_SIZE, t_lo_offset_r, mask_a_r, gvl);
+		__epi_2xi32 a_i = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_lo + i / BLOCK_SIZE, t_lo_offset_i, mask_a_i, gvl);
+		__epi_2xi32 b_r = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_hi + i / BLOCK_SIZE, t_hi_offset_r, mask_b_r, gvl);
+		__epi_2xi32 b_i = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_hi + i / BLOCK_SIZE, t_hi_offset_i, mask_b_i, gvl);
 
 		// stage1
-		butterfly(&a, &b, &new_a, &new_b, gvl);
-		cmulc_twiddle(&new_b, &twiddle, &new_bt, gvl);
-		suffle(&new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b, gvl);
+		__epi_2xi32 new_a_r = butterfly_add(a, b, gvl);
+		__epi_2xi32 new_a_i = butterfly_add(a, b, gvl);
+		__epi_2xi32 new_b_r = butterfly_sub(a, b, gvl);
+		__epi_2xi32 new_b_i = butterfly_sub(a, b, gvl);
+
+		//__epi_2xf32 new_bt = cmulc_twiddle(new_b, twiddle, gvl);
+		__epi_2xf32 new_bt_r = mulc_twiddle_r(new_b_r, new_b_i, twiddle_r, twiddle_i, gvl);
+		__epi_2xf32 new_bt_i = mulc_twiddle_i(new_b_r, new_b_i, twiddle_r, twiddle_i, gvl);
+
+		shuffle(&new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b, gvl);
 
 		// stage2
-		butterfly(&pg, &a, &b, &new_a, &new_b);
+		new_a = butterfly_add(a, b, gvl);
+		new_b = butterfly_sub(a, b, gvl);
 
 		// store
 		svst1_scatter_offset(pg, f + i * 2 + 0, ind_store, new_a);
