@@ -70,31 +70,9 @@ static inline __epi_2xf32 mulc_twiddle_i(__epi_2xf32 *br, __epi_2xf32 *bi, const
     return __builtin_epi_vfsub_2xf32(__builtin_epi_vfmul_2xf32(tr, bi, gvl), __builtin_epi_vfmul_2xf32(ti, br, gvl), gvl);
 }
 
-static inline void shuffle(__epi_2xi32 *a, __epi_2xi32 *b, const __epi_2xi32 *ind_a, const __epi_2xi32 *ind_b, const __epi_2xi32 *ind_zip, __epi_2xf32 *new_a, __epi_2xf32 *new_b, long gvl)
+static inline __epi_2xf32 shuffle(__epi_2xi32 *a, __epi_2xi32 *b, __epi_2xi32 ind, const __epi_2xi32 ind_zip, long gvl)
 {
-    __epi_2xi32 gathered_a = __builtin_epi_vrgather_2xi32(a, ind_a, gvl);
-    __epi_2xi32 gathered_b = __builtin_epi_vrgather_2xi32(b, ind_b, gvl);
-
-    __epi_2xi32 ind_n = __builtin_epi_vid_2xi32(gvl);
-    __epi_2xi32 div = __builtin_epi_vdiv_2xi32(ind_n, __builtin_epi_vmv_v_x_2xi32(2, gvl), gvl);
-    __epi_2xi32 repeat = __builtin_epi_vsub_2xi32(ind_n, __builtin_epi_vmul_2xi32(div ,__builtin_epi_vmv_v_x_2xi32(2, gvl), gvl), gvl);
-
-    //a: 0, 1, 2, 3, 4, 5, 6, 7,
-    //b: 0, 0, 1, 1, 2, 2, 3, 3,
-    //a - b *2
-    //   0, 1, 0, 1, 0, 1, 0, 1
-    // Mask for every other
-
-    // TODO:
-    // Calculate 0,1,0,1,0,1... mask
-    // Take every other value by shifting b one step to right before vmerge
-    // One final vrgather
-
-    __epi_2xf32 shuffle_a_1 = __builtin_epi_vload_indexed_2xf32(, gvl)
-    *new_a = svtbl(svzip1(svtbl(*a, *ind_a), svtbl(*b, *ind_a)), *ind_zip);
-    // a1, a1, a2, a2, a3, a3
-    // 0, 2, 1, 3, 4, 6, 5, 8
-    *new_b = svtbl(svzip1(svtbl(*a, *ind_b), svtbl(*b, *ind_b)), *ind_zip);
+    return svtbl(svzip1(svtbl(*a, *ind), svtbl(*b, *ind)), *ind_zip);
 }
 
 //----gp-utils-----------------------------------------------------------------

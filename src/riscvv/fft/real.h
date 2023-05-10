@@ -28,7 +28,9 @@ inline static void fft4xNr(
 	const __epi_2xi32 ind_zip   = indexA((uint32_t []){0, 2, 1, 3}, 4, 4, gvl);
 	const __epi_2xi32 ind_low   = indexA((uint32_t []){0, 1}, 2, 4, gvl);
 	const __epi_2xi32 ind_high  = indexA((uint32_t []){2, 3}, 2, 4, gvl);
-	const __epi_2xi32 ind_store = indexA((uint32_t []){0, 4, 8, 12}, 4, 8 * 4, gvl);
+	//const __epi_2xi32 ind_store = indexA((uint32_t []){0, 4, 8, 12}, 4, 8 * 4, gvl);
+	const __epi_2xi32 ind_store_r = indexA((uint32_t []){0 * 4, 2 * 4}, 2, 8 * 4, gvl);
+	const __epi_2xi32 ind_store_i = indexA((uint32_t []){1 * 4, 3 * 4}, 2, 8 * 4, gvl);
 
 	// Offsets and masks
 
@@ -42,7 +44,7 @@ inline static void fft4xNr(
 	__epi_2xi32 t_hi_offset_i = aos4_offset_i(&b_pred, stride_t, gvl);
 
     bool no_jump[8];
-	jump_arr(&no_jump, &a_pred, &b_pred);
+	jump_arr(&no_jump, &a_pred, &b_pred, row_count);
 
 	__epi_2xi1 mask_a_r = aos4_mask_a_r(&no_jump, &a_pred, &b_pred, gvl);
 	__epi_2xi1 mask_a_i = aos4_mask_a_i(&no_jump, &a_pred, &b_pred, gvl);
@@ -60,24 +62,39 @@ inline static void fft4xNr(
 		__epi_2xi32 b_i = __builtin_epi_vload_indexed_2xi32_mask(__builtin_epi_vmv_v_x_2xi32(0), t_hi + i / BLOCK_SIZE, t_hi_offset_i, mask_b_i, gvl);
 
 		// stage1
-		__epi_2xi32 new_a_r = butterfly_add(a, b, gvl);
-		__epi_2xi32 new_a_i = butterfly_add(a, b, gvl);
-		__epi_2xi32 new_b_r = butterfly_sub(a, b, gvl);
-		__epi_2xi32 new_b_i = butterfly_sub(a, b, gvl);
+		__epi_2xi32 new_a_r = butterfly_add(a_r, b_r, gvl);
+		__epi_2xi32 new_a_i = butterfly_add(a_i, b_i, gvl);
+		__epi_2xi32 new_b_r = butterfly_sub(a_r, b_r, gvl);
+		__epi_2xi32 new_b_i = butterfly_sub(a_i, b_i, gvl);
 
-		//__epi_2xf32 new_bt = cmulc_twiddle(new_b, twiddle, gvl);
 		__epi_2xf32 new_bt_r = mulc_twiddle_r(new_b_r, new_b_i, twiddle_r, twiddle_i, gvl);
 		__epi_2xf32 new_bt_i = mulc_twiddle_i(new_b_r, new_b_i, twiddle_r, twiddle_i, gvl);
 
-		shuffle(&new_a, &new_bt, &ind_low, &ind_high, &ind_zip, &a, &b, gvl);
+		new_a_r = shuffle(&new_a_r, &new_bt_r, &ind_low, &ind_zip, gvl);
+		new_a_i = shuffle(&new_a_i, &new_bt_i, &ind_low, &ind_zip, gvl);
+		new_b_r = shuffle(&new_a_r, &new_bt_r, &ind_high, &ind_zip, gvl);
+		new_b_r = shuffle(&new_a_i, &new_bt_i, &ind_high, &ind_zip, gvl);
 
 		// stage2
-		new_a = butterfly_add(a, b, gvl);
-		new_b = butterfly_sub(a, b, gvl);
+		__epi_2xi32 new_a_r = butterfly_add(a_r, b_r, gvl);
+		__epi_2xi32 new_a_i = butterfly_add(a_i, b_i, gvl);
+		__epi_2xi32 new_b_r = butterfly_sub(a_r, b_r, gvl);
+		__epi_2xi32 new_b_i = butterfly_sub(a_i, b_i, gvl);
 
 		// store
-		svst1_scatter_offset(pg, f + i * 2 + 0, ind_store, new_a);
-		svst1_scatter_offset(pg, f + i * 2 + 4, ind_store, new_b);
+
+		// real and img, need to do every other2
+		// 0, 1, 2, 3, 8, 9, 10, 11
+
+		// should be 0, 2, 8, 10,
+		__builtin_epi_vstore_indexed_2xf32(f + i * 2 + 0, new_a_r, ind_store_r, gvl);
+		// should be 1, 3, 9, 11
+		__builtin_epi_vstore_indexed_2xf32(f + i * 2 + 0, new_a_i, ind_store_i, gvl);
+		// 4, 5, 6, 7, 12, 13, 14, 15
+		// should be 4, 6, 12, 14,
+		__builtin_epi_vstore_indexed_2xf32(f + i * 2 + 4, new_b_r, ind_store_r, gvl);
+		// should be 5, 7, 13, 15
+		__builtin_epi_vstore_indexed_2xf32(f + i * 2 + 4, new_b_i, ind_store_i, gvl);
 
 		i += gvl;
 	}
