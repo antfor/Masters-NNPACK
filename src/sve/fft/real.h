@@ -91,8 +91,8 @@ static inline void ctr_get_index(
 	const svbool_t all = svptrue_b32();
 	const int offset = 2; //skip w0
     const int HL = column_count * BLOCK_SIZE;
-		switch(N){
-			case 8:
+		switch(BLOCK_SIZE){
+			case 4:
 				*indr =   indexA(all, (uint32_t []){2,3,0+HL,1+HL}, BLOCK_SIZE, BLOCK_SIZE);
 				*indN_r = indexA(all, (uint32_t []){2+HL,3+HL,0+HL,1+HL}, BLOCK_SIZE, BLOCK_SIZE);
 
@@ -100,7 +100,7 @@ static inline void ctr_get_index(
 				*ind_store_bot = indexA(all, (uint32_t []){2*N,3*N,0*N,1*N}, BLOCK_SIZE, 1);
 				break;
 
-			case 16:
+			case 8:
 				*indr =   indexA(all, (uint32_t []){2,3,4,5,6,7,0+HL,1+HL}, 8, 8);
 				*indN_r = indexA(all, (uint32_t []){6+HL,7+HL,4+HL,5+HL,2+HL,3+HL,0+HL,1+HL}, 8, 8);
 
