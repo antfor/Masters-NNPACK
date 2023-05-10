@@ -87,7 +87,7 @@ void nnp_fft8x8_with_offset__sve(
 	const float *restrict row0 = data;
 	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
 
-    sve_fft8xN_real(row0, row4, data_stride,row_offset, row_count, &block[column_offset], BLOCK_SIZE, column_count);
+    sve_fft8xN_real(row0, row4, data_stride, row_offset, row_count, column_offset, column_count, block);
 
 	complex_256(block, transform, transform_stride);
 	/*

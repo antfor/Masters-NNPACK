@@ -280,7 +280,7 @@ static inline void sve_ifft8x8_complex(
 //--16--------------------------------------------------------------------------------
 
 
-inline static void sve_fft16_complex_512(
+inline static void sve_fft16x16_complex(
     float tf[restrict static 16 * 16])
 {
 

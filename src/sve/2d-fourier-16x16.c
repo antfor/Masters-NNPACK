@@ -30,13 +30,14 @@ void nnp_fft16x16_with_offset__sve(
 	const float *restrict row0 = data;
 	const float *restrict row8 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
 
-	sve_fft16_real(row0, row8, data_stride,row_offset, row_count, column_offset, column_count, block);
+	sve_fft16x16_real(row0, row8, data_stride,row_offset, row_count, column_offset, column_count, block);
 
-	sve_fft16_complex_512(block);
+	sve_fft16x16_complex(block);
 
 	sve_fft16x16_dualreal(block);
 
-	//store
+	//store 
+	//todo vectorize
 	const uint32_t simd_width = nnp_hwinfo.simd_width;
 	const uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
 	for (size_t i = 0; i < HALF_BLOCK_LENGTH/jump; i ++) {
