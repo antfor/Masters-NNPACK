@@ -251,7 +251,6 @@ static inline void sve_ifft16x16_dualreal(const float transform[restrict static 
 	idualreal_Nbyte(f, 16, 2);
 
 	f[0 + HALF_BLOCK_LENGTH] = y0;
-
 	f[8] = x8;
 	f[8 + HALF_BLOCK_LENGTH] = y8;
 }

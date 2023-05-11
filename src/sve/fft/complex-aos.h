@@ -15,17 +15,17 @@ inline static void fft4xNr(
 	size_t stride_t,
 	uint32_t row_start, uint32_t row_count,
 	float f[restrict static 1],
-	const uint32_t N)
+	const uint32_t column_count)
 {
 
 	const uint32_t BLOCK_SIZE = 4;
-	const uint32_t LENGTH = BLOCK_SIZE * N;
+	const uint32_t HALF_BLOCK_LENGTH = BLOCK_SIZE * column_count;
 
 	svbool_t pg, pg_a, pg_b;
 	svuint32_t t_lo_offset, t_hi_offset;
 	svfloat32_t b, a, new_b, new_a, new_bt;
 
-	const uint64_t numVals = svcntw();
+	const uint64_t numVals = svcntw()/BLOCK_SIZE;
 
 	const svfloat32_t twiddle = svdupq_f32(COS_0PI_OVER_2, SIN_0PI_OVER_2, COS_1PI_OVER_2, SIN_1PI_OVER_2);
 
@@ -35,13 +35,13 @@ inline static void fft4xNr(
 
 	aos4_pred_and_offset(row_start, row_count, &pg_a, &pg_b, stride_t, &t_lo_offset, &t_hi_offset);
 
-	for (uint32_t i = 0; i < LENGTH; i += numVals)
+	for (uint32_t i = 0; i < column_count; i += numVals)
 	{
-		pg = svwhilelt_b32_s32(i, LENGTH);
+		pg = svwhilelt_b32_s32(i * BLOCK_SIZE, column_count * BLOCK_SIZE);
 
 		// load
-		a = svld1_gather_offset(svmov_z(pg, pg_a), t_lo + i / BLOCK_SIZE, t_lo_offset);
-		b = svld1_gather_offset(svmov_z(pg, pg_b), t_hi + i / BLOCK_SIZE, t_hi_offset);
+		a = svld1_gather_offset(svmov_z(pg, pg_a), t_lo + i, t_lo_offset);
+		b = svld1_gather_offset(svmov_z(pg, pg_b), t_hi + i, t_hi_offset);
 
 		// stage1
 		butterfly(&pg, &a, &b, &new_a, &new_b);
@@ -52,8 +52,55 @@ inline static void fft4xNr(
 		butterfly(&pg, &a, &b, &new_a, &new_b);
 
 		// store
-		svst1(pg, f + i + 0, new_a);
-		svst1(pg, f + i + LENGTH, new_b);
+		svst1(pg, f + i * BLOCK_SIZE + 0, new_a);
+		svst1(pg, f + i * BLOCK_SIZE + HALF_BLOCK_LENGTH, new_b);
+	}
+}
+
+static inline void ifft4xNc(
+	float w[restrict static 1] ,	
+	float f[restrict static 64],
+	uint32_t column_count)
+{
+
+	const uint32_t BLOCK_SIZE = 4;
+	const uint32_t HALF_BLOCK_LENGTH = column_count * BLOCK_SIZE;
+
+	const svfloat32_t scaled_twiddle = svdupq_f32(0.25f * COS_0PI_OVER_2, 0.25f * SIN_0PI_OVER_2, 0.25f * COS_1PI_OVER_2, 0.25f * SIN_1PI_OVER_2);
+
+	svbool_t pg;
+	const svbool_t all = svptrue_b32();
+	svfloat32_t a, b, new_a, new_b, new_bt;
+
+	const uint64_t numVals = svcntw() / BLOCK_SIZE;
+
+	const svuint32_t ind_zip = index4(0, 2, 1, 3, 4);
+	const svuint32_t ind_low = index2(0, 1, 4);
+	const svuint32_t ind_high = index2(2, 3, 4);
+
+	const svuint32_t index = indexN(all, 0, 1, 8, 4);
+
+	for(uint32_t column = 0; column < column_count; column += numVals){
+
+		pg = svwhilelt_b32_s32(column * BLOCK_SIZE, column_count * BLOCK_SIZE);
+
+		// load
+		a = svld1_gather_index(pg, w + column * BLOCK_SIZE * 2 + 0, index);
+		b = svld1_gather_index(pg, w + column * BLOCK_SIZE * 2 + BLOCK_SIZE, index);
+
+		// stage2
+		butterfly(&pg, &a, &b, &new_a, &new_b);
+
+		// stage1
+		suffle(&pg, &new_a, &new_b, &ind_low, &ind_high, &ind_zip, &a, &b);
+		cmul_twiddle(&pg, &b, &scaled_twiddle, &new_bt);
+		a = svmul_m(pg, a, 0.25f);
+		butterfly(&pg, &a, &new_bt, &new_a, &new_b);
+		
+		// store
+		svst1_scatter_index(pg, f + column * BLOCK_SIZE * 2 + 0 , index, new_a);
+		svst1_scatter_index(pg, f + column * BLOCK_SIZE * 2 + BLOCK_SIZE, index, new_b);
+
 	}
 }
 
@@ -158,7 +205,7 @@ static inline void sve_ifft8xNr(float w[restrict static 1] ,float f[restrict sta
         // stage1
         suffle(&pg, &new_a, &new_b, &ind_low, &ind_high, &ind_zip_concat, &a, &b);
         cmul_twiddle(&pg, &b, &scaled_twiddle_1, &new_bt);
-        a = svmul_m(pg, a, svdup_f32(0.125f));
+        a = svmul_m(pg, a, 0.125f);
         butterfly(&pg, &a, &new_bt, &new_a, &new_b);
 
         // store

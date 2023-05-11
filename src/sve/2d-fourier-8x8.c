@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #include <sve/fft/real.h>
-#include <sve/fft/complex.h> 
+#include <sve/fft/complex-soa.h> 
 #include <sve/fft/dualreal.h>
 #include <sve/fft/sve-print.h>
 
@@ -51,19 +51,18 @@ void complex_256(float block[BLOCK_LENGTH] ,float transform[restrict static 1], 
 
 	//store
 	const uint32_t simd_width = nnp_hwinfo.simd_width;
-	float to_bytes = sizeof(float);
-	const svuint32_t ind_store = svindex_u32(0,to_bytes * 2); 
+	const svuint32_t ind_store = svindex_u32(0,2); 
 	svbool_t pg;
 	uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
-	uint32_t jumps = (HALF_BLOCK_LENGTH + jump - 1)/jump; //round up
+	uint32_t jumps = idiv_ceil(HALF_BLOCK_LENGTH, jump);
 	svbool_t vlen = svwhilelt_b32_s32(0, jump);
 	
 	for(uint32_t i = 0; i < jumps; i++){
 		pg = svwhilelt_b32_s32(i * jump, HALF_BLOCK_LENGTH);
 		pg = svmov_z(pg, vlen); 
 		
-		const svfloat32_t real = svld1_gather_offset(pg, block + i * jump * 2 + 0 , ind_store); 
-		const svfloat32_t imag = svld1_gather_offset(pg, block + i * jump * 2 + 1 , ind_store); 
+		const svfloat32_t real = svld1_gather_index(pg, block + i * jump * 2 + 0 , ind_store); 
+		const svfloat32_t imag = svld1_gather_index(pg, block + i * jump * 2 + 1 , ind_store); 
 
 		svst1(pg, transform + 0, real);
 		svst1(pg, transform + jump, imag);
@@ -133,29 +132,19 @@ void nnp_ifft8x8_with_bias__sve(
 	block[0] += (*bias) * 64.0f;
 
 	sve_ifft8x8_complex(block);
-	/*
-	if(nnp_hwinfo.simd_width % 2 == 0 && 0){
-		sve_ifft8x8_complex(block);
-	}else{
-		sve_ifft8x8_complex_128(block);
-	}
-	*/
+	
+	//printf("complex\n");
+	//fprint_array_f(block, 8*8, 8);
 
 	sve_ifft8x8_real(block, column_count);
+
+	//printf("real\n");
+	//fprint_array_f(block, 8*8, 8);
 	
 	//todo vectorize
-	const uint32_t rows[8] = {0,0,6,6,4,4,2,2};
-	//real numbers
-	for (size_t row = 0; row < row_count; row+=2) {
+	for (size_t row = 0; row < row_count; row++) {
 		for (size_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = block[rows[row] * BLOCK_SIZE + 2 * column + 0];
-		}
-	}
-
-	//imag numbers
-	for (size_t row = 1; row < row_count; row+=2) {
-		for (size_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = block[rows[row] * BLOCK_SIZE + 2 * column + 1];
+			data[row * data_stride + column] = block[row + column * BLOCK_SIZE];
 		}
 	}
 
@@ -186,22 +175,18 @@ void nnp_ifft8x8_with_bias_with_relu__sve(
 		sve_ifft8x8_complex_128(block);
 	}
 	*/
+	//printf("complex\n");
+	//fprint_array_f(block, 8*8, 8);
 
 	sve_ifft8x8_real(block, column_count);
+
+	//printf("real\n");
+	//fprint_array_f(block, 8*8, 8);
 	
 	//todo vectorize
-	const uint32_t rows[8] = {0,0,6,6,4,4,2,2};
-	//real numbers
-	for (size_t row = 0; row < row_count; row+=2) {
+	for (size_t row = 0; row < row_count; row++) {
 		for (size_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = relu(block[rows[row] * BLOCK_SIZE + 2 * column + 0], 0);
-		}
-	}
-
-	//imag numbers
-	for (size_t row = 1; row < row_count; row+=2) {
-		for (size_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = relu(block[rows[row] * BLOCK_SIZE + 2 * column + 1], 0);
+			data[row * data_stride + column] = relu(block[row + column * BLOCK_SIZE],0);
 		}
 	}
 

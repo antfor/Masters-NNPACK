@@ -46,16 +46,17 @@ inline static void aos4_pred_and_offset(uint32_t row_start, uint32_t row_count, 
 
 inline static void aos8_offset(const bool *n, size_t stride, svuint32_t *t_n_offset){
 
-	 int cSum_n[7];
-	 cSum_n[0] = n[0];
-	 cSum_n[1] = cSum_n[0] + n[1];
-	 cSum_n[2] = cSum_n[1] + n[2];
-	 cSum_n[3] = cSum_n[2] + n[3];
-	 cSum_n[4] = cSum_n[3] + n[4];
-	 cSum_n[5] = cSum_n[4] + n[5];
-	 cSum_n[6] = cSum_n[5] + n[6];
+	int cSum_n[7];
+	cSum_n[0] = n[0];
+	cSum_n[1] = cSum_n[0] + n[1];
+	cSum_n[2] = cSum_n[1] + n[2];
+	cSum_n[3] = cSum_n[2] + n[3];
+	cSum_n[4] = cSum_n[3] + n[4];
+	cSum_n[5] = cSum_n[4] + n[5];
+	cSum_n[6] = cSum_n[5] + n[6];
 
-	 *t_n_offset = index8(0, cSum_n[0] * stride * 4, cSum_n[1] * stride * 4, cSum_n[2] * stride * 4, cSum_n[3] * stride * 4, cSum_n[4] * stride * 4, cSum_n[5] * stride * 4, cSum_n[6] * stride * 4, 1 * 4);
+	//*t_n_offset = index8(0, cSum_n[0] * stride * 4, cSum_n[1] * stride * 4, cSum_n[2] * stride * 4, cSum_n[3] * stride * 4, cSum_n[4] * stride * 4, cSum_n[5] * stride * 4, cSum_n[6] * stride * 4, 1 * 4);
+    *t_n_offset = indexA(svptrue_b32(), (uint32_t []){0,cSum_n[0] * stride * 4, cSum_n[1] * stride * 4, cSum_n[2] * stride * 4, cSum_n[3] * stride * 4, cSum_n[4] * stride * 4, cSum_n[5] * stride * 4, cSum_n[6] * stride * 4}, 8 ,1 * 4);
 }
 
 

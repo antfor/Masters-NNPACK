@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #include <sve/fft/real.h>
-#include <sve/fft/complex.h>
+#include <sve/fft/complex-soa.h>
 #include <sve/fft/dualreal.h>
 
 #include <sve/fft/sve-print.h>

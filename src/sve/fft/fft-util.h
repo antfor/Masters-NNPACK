@@ -70,39 +70,6 @@ static inline void sumSplit(svbool_t pg, svfloat32_t *n, uint32_t split, uint32_
 
 }
 
-//--ifft---------------------------------------------------------------
-
-static inline void zip_rows_8(float block[restrict static 1]){
-
-	const uint32_t BLOCK_SIZE = 8;
-	const uint64_t numVals = svcntw();
-	svbool_t pg;
-	svfloat32_t r1, r2, r3, r4, r5, r6;
-
-	for(int i = 0; i < BLOCK_SIZE; i+= numVals){
-
-		pg = svwhilelt_b32_s32(i, BLOCK_SIZE);
-
-		r1 = svld1(pg, block + i + BLOCK_SIZE * 1);
-		r2 = svld1(pg, block + i + BLOCK_SIZE * 2);
-		r3 = svld1(pg, block + i + BLOCK_SIZE * 3);
-
-		r4 = svld1(pg, block + i + BLOCK_SIZE * 4);
-		r5 = svld1(pg, block + i + BLOCK_SIZE * 5);
-		r6 = svld1(pg, block + i + BLOCK_SIZE * 6);
-
-
-		svst1(pg, block + i + BLOCK_SIZE * 1, r4);
-		svst1(pg, block + i + BLOCK_SIZE * 2, r1);
-		svst1(pg, block + i + BLOCK_SIZE * 3, r5);
-
-		svst1(pg, block + i + BLOCK_SIZE * 4, r2);
-		svst1(pg, block + i + BLOCK_SIZE * 5, r6);
-		svst1(pg, block + i + BLOCK_SIZE * 6, r3);
-		
-	}
-}
-
 //--index--------------------------------------------------------------
 
 static inline svuint32_t index2(uint32_t a, uint32_t b, uint32_t step)
