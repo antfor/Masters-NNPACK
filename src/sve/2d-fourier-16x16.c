@@ -38,17 +38,19 @@ void nnp_fft16x16_with_offset__sve(
 	sve_fft16x16_dualreal(block);
 
 	//store 
-	//todo vectorize
 	const uint32_t simd_width = nnp_hwinfo.simd_width;
 	const uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
+	const svbool_t all = svptrue_b32();//svwhilelt_b32_s32(0, jump);
+	svfloat32_t real, imag;
+	const svuint32_t ind_load = indexN(all, 0, 1, BLOCK_SIZE * 2, BLOCK_SIZE);
+
 	for (size_t i = 0; i < HALF_BLOCK_LENGTH/jump; i ++) {
 
-		for(int j = 0; j < jump; j++){
-			int ind = i*jump + j + (i*jump + j)/BLOCK_SIZE * BLOCK_SIZE;
-			transform[j + 0] =    block[ind + 0];
-			transform[j + jump] = block[ind + BLOCK_SIZE];
-			
-		}
+		real = svld1_gather_index(all, block + i * jump * 2 + 0, ind_load);
+		imag = svld1_gather_index(all, block + i * jump * 2 + BLOCK_SIZE, ind_load);	
+
+		svst1(all, transform + 0, real);
+		svst1(all, transform + jump, imag);
 		transform += transform_stride;
 	}
 
@@ -82,6 +84,9 @@ void nnp_fft16x16_kernel__sve(
 	//store 
 	const uint32_t simd_width = nnp_hwinfo.simd_width;
 	const uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
+	const svbool_t all = svptrue_b32();//svwhilelt_b32_s32(0, jump);
+	svfloat32_t real, imag;
+	const svuint32_t ind_load = indexN(all, 0, 1, BLOCK_SIZE * 2, BLOCK_SIZE);
 
 	float *transform_start = transform;
 	float *block_start = block;
@@ -92,17 +97,15 @@ void nnp_fft16x16_kernel__sve(
 		
 		for (size_t i = 0; i < HALF_BLOCK_LENGTH/jump; i ++) {
 
-			//todo vectorize
-			for(int j = 0; j < jump; j++){
-				int ind = i*jump + j + (i*jump + j)/BLOCK_SIZE * BLOCK_SIZE;
-				transform[j + 0] =    block_start[ind + 0];
-				transform[j + jump] = block_start[ind + BLOCK_SIZE];
-				
-			}
+			real = svld1_gather_index(all, block_start + i * jump * 2 + 0, ind_load);
+			imag = svld1_gather_index(all, block_start + i * jump * 2 + BLOCK_SIZE, ind_load);	
+
+			svst1(all, transform + 0, real);
+			svst1(all, transform + jump, imag);
 			transform += transform_stride;
 		}
-	transform_start += transform_jump;
-	block_start += BLOCK_LENGTH;
+		transform_start += transform_jump;
+		block_start += BLOCK_LENGTH;
 	}
 	
 
