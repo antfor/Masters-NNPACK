@@ -6,6 +6,7 @@
 #include <sve/fft/fft-util.h>
 #include <sve/fft/sve-print.h>
 #include <sve/fft/complex-aos.h>
+#include <sve/fft/complex-channel-aos.h>
 
 
 //--fftN to fft2N-------------------------------------------------------------
@@ -40,6 +41,51 @@ inline static void fftN_to_fft2N(
          svst1(pg, f + column_offset + column + 0, new_a);
          svst1(pg, f + column_offset + column + stride_f, new_b);
     }
+
+}
+
+inline static void fftN_to_fft2N_channel(
+	const float w[restrict static 1],
+	size_t stride_c,
+
+	float f[restrict static 1],
+    size_t stride_r,
+    const uint32_t column_offset,
+	const uint32_t column_count,
+	int channels, int N)
+{
+
+    svfloat32_t a, b, new_a, new_b;
+    svbool_t pg;
+    uint32_t numVals = svcntw();
+
+	const int stride_w = column_count * N;
+	const int stride_f = N * N;
+
+	const svbool_t all = svptrue_b32(); 
+	const svuint32_t ind_load =  svindex_u32(0, stride_w); 
+	const svuint32_t ind_store =  svindex_u32(0, stride_f);
+
+
+    for(int column =0; column < column_count; column += 1 ){
+
+		for(int channel=0; channel < channels; channel+= numVals){
+			//pg = svwhilelt_b32_s32(column, column + 1);
+			pg = svwhilelt_b32_s32(channel, channels);
+
+			//load
+			a = svld1_gather_index(pg, w + channel * stride_w + column * stride_c + 0, ind_load);
+			b = svld1_gather_index(pg, w + channel * stride_w + column * stride_c + 1, ind_load);
+		
+			//stage 1
+			butterfly(&pg, &a, &b, &new_a, &new_b);
+
+			//store
+			svst1_scatter_index(pg, f + channel * stride_f + column_offset + column + 0,        ind_store, new_a);
+			svst1_scatter_index(pg, f + channel * stride_f + column_offset + column + stride_r, ind_store, new_b);
+		}
+
+	}
 
 }
 
@@ -105,6 +151,8 @@ static inline void ctr_get_index(
 	const svbool_t all = svptrue_b32();
 	const int offset = 2; //skip w0
     const int HL = column_count * BLOCK_SIZE;
+
+		//note complex_to_real_NxNc_channel depend on the jump value 
 		switch(BLOCK_SIZE){
 			case 4:
 				*indr =   indexA(all, (uint32_t []){2,3,0+HL,1+HL}, BLOCK_SIZE, BLOCK_SIZE);
@@ -165,6 +213,70 @@ static inline void complex_to_real_NxNc(
 		x = svmul_m(pg, x, to_conjugate);
 		svst1_scatter_index(pg, f + column_offset + column + BLOCK_SIZE * N, ind_store_bot, x);
  
+	}
+}
+
+
+static inline void complex_to_real_NxNc_channel(
+	const float w[restrict static 1], 
+	float f[restrict static 1],
+	uint32_t column_offset, uint32_t column_count, 
+	int N, int channels){
+
+	const uint32_t BLOCK_SIZE = N/2;
+    const uint64_t numVals = svcntw()/BLOCK_SIZE;
+
+	const svfloat32_t to_conjugate = svdupq_f32(1.0f,-1.0f, 1.0f,-1.0f);
+
+	svbool_t pg;
+	svfloat32_t xr, xN_r,x, xe, xo, xot;
+	svuint32_t indr, indN_r, ind_store_top, ind_store_bot;
+	ctr_get_index(BLOCK_SIZE, column_count, N, &indr, &indN_r, &ind_store_top, &ind_store_bot);
+	svfloat32_t twiddle_i = get_twiddle_i_top(BLOCK_SIZE);
+
+
+	const svbool_t all = svptrue_b32();
+	const int w_stride = N * column_count;
+	const int f_stride = N*N;
+	//jump value can be diffret for riscV?
+	const svuint32_t w_offset = repeatN(all, 0, w_stride - BLOCK_SIZE, BLOCK_SIZE);
+	const svuint32_t f_offset = repeatN(all, 0, f_stride - 1, BLOCK_SIZE);
+
+	indr = svadd_m(all, indr, w_offset);
+	indN_r = svadd_m(all, indN_r, w_offset);
+	ind_store_top = svadd_m(all, ind_store_top, f_offset);
+	ind_store_bot = svadd_m(all, ind_store_bot, f_offset);
+
+	for(int column = 0; column < column_count; column+=1){
+
+		//numVals = 1;
+		for(uint32_t channel = 0; channel < channels; channel += numVals){
+		
+			//pg = svwhilelt_b32_s32(column * BLOCK_SIZE, (column + 1) * BLOCK_SIZE);
+			pg = svwhilelt_b32_s32(channel * BLOCK_SIZE , channels * BLOCK_SIZE);
+
+			//load 
+			xr  =  svld1_gather_index(pg, w + channel * w_stride + column * BLOCK_SIZE , indr);
+			xN_r = svld1_gather_index(pg, w + channel * w_stride + column * BLOCK_SIZE , indN_r);
+			xN_r = svmul_m(pg, xN_r, to_conjugate);
+
+			xe = svadd_m(pg, xr, xN_r);
+			xe = svmul_m(pg, xe, 0.5f);
+
+			xo = svsub_m(pg, xr, xN_r);
+			xo = svmul_m(pg, xo, 0.5f);
+
+			cmulc_twiddle(&pg, &xo, &twiddle_i, &xot);
+
+			x = svadd_m(pg, xe, xot);
+			svst1_scatter_index(pg, f + channel * f_stride + column_offset + column + 0, ind_store_top, x);
+
+			x = svsub_m(pg, xe, xot);
+			x = svmul_m(pg, x, to_conjugate);
+			svst1_scatter_index(pg, f + channel * f_stride + column_offset + column + BLOCK_SIZE * N, ind_store_bot, x);
+	
+		}
+
 	}
 }
 
@@ -299,6 +411,25 @@ static inline void sve_fft16x16_real(
 	complex_to_real_NxNc(w, f, column_offset, column_count, 16);	
 	fftN_to_fft2N(w,8,f,16,column_offset,column_count);
 
+}
+
+static inline void sve_fft16x16_real_kernel(
+	float t0[restrict static 1],
+	float t8[restrict static 1],
+	size_t stride_t,
+	uint32_t row_count,
+    uint32_t column_count,
+	float f[restrict static 1],
+	int channels)
+{
+	//todo make in place
+	float w[16 * column_count * channels]; 
+
+	fft8xNr_channel(t0, t8, stride_t, 0, row_count, 0, column_count, w, channels);
+
+	complex_to_real_NxNc_channel(w, f, 0, column_count, 16, channels);
+
+	fftN_to_fft2N_channel(w,8,f,16,0,column_count, channels, 16);
 }
 
 static inline void sve_ifft16x16_real(float block[restrict static 256], size_t column_count){

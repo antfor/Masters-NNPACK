@@ -97,6 +97,15 @@ static inline svuint32_t indexN(svbool_t pg, uint32_t start, uint32_t stride, in
 	return svadd_m(pg, svadd_m(pg, ind_mul, ind_N), start);
 }
 
+static inline svuint32_t repeatN(svbool_t pg, uint32_t start, int32_t jump, uint32_t N){
+
+	const svuint32_t ind_N = svindex_u32(0, 1);
+	const svuint32_t ind_div = svdiv_m(pg, ind_N, N);
+	const svuint32_t ind_mul = svmul_m(pg, ind_div, jump); 
+
+	return svadd_m(pg, ind_mul, start);
+}
+
 
 static inline svuint32_t indexA(svbool_t pg, uint32_t ind[restrict static 1], int N, int jump){
     

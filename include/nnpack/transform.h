@@ -84,6 +84,9 @@ void nnp_owt8x8_3x3__scalar(const float m[], float s[], size_t stride_m, size_t 
 void nnp_owt8x8_3x3_with_bias__scalar(const float m[], float s[], const float bias[], size_t stride_m, size_t stride_s, uint32_t row_count, uint32_t column_count);
 void nnp_owt8x8_3x3_with_bias_with_relu__scalar(const float m[], float s[], const float bias[], size_t stride_m, size_t stride_s, uint32_t row_count, uint32_t column_count);
 
+void nnp_fft16x16_kernel__sve(float t[], float f[], size_t stride_t, size_t stride_f, uint32_t row_count, uint32_t column_count, uint32_t channels, uint32_t jump_t);
+void nnp_fft8x8_kernel__sve(float t[], float f[], size_t stride_t, size_t stride_f, uint32_t row_count, uint32_t column_count, uint32_t channels, uint32_t jump_t);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

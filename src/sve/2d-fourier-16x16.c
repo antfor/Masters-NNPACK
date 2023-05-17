@@ -5,6 +5,7 @@
 
 #include <sve/fft/real.h>
 #include <sve/fft/complex-soa.h>
+#include <sve/fft/complex-channel-soa.h>
 #include <sve/fft/dualreal.h>
 
 #include <sve/fft/sve-print.h>
@@ -53,6 +54,61 @@ void nnp_fft16x16_with_offset__sve(
 
 }
 
+void nnp_fft16x16_kernel__sve(
+	const float data[restrict static 1],
+	float transform[restrict static 1],
+	size_t data_stride, size_t transform_stride,
+	uint32_t row_count, uint32_t column_count,
+	uint32_t channels, uint32_t transform_jump)
+{
+	uint32_t row_offset = 0;
+	uint32_t column_offset = 0;
+
+	transform_stride /= sizeof(float);
+	transform_jump /= sizeof(float);
+
+	float *block = (float*)calloc(BLOCK_LENGTH * channels, sizeof(float));
+
+    float *row0 = (float *) data;
+	float *row8 = (float *) data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
+
+
+	sve_fft16x16_real_kernel(row0, row8, data_stride, row_count, column_count, block, channels);
+
+	sve_fft16x16_complex_kernel(block, channels);
+
+	sve_fft16x16_dualreal_kernel(block, channels);
+
+	//store 
+	const uint32_t simd_width = nnp_hwinfo.simd_width;
+	const uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
+
+	float *transform_start = transform;
+	float *block_start = block;
+
+	for(int channel = 0; channel < channels; channel++){
+
+		float * transform = transform_start;
+		
+		for (size_t i = 0; i < HALF_BLOCK_LENGTH/jump; i ++) {
+
+			//todo vectorize
+			for(int j = 0; j < jump; j++){
+				int ind = i*jump + j + (i*jump + j)/BLOCK_SIZE * BLOCK_SIZE;
+				transform[j + 0] =    block_start[ind + 0];
+				transform[j + jump] = block_start[ind + BLOCK_SIZE];
+				
+			}
+			transform += transform_stride;
+		}
+	transform_start += transform_jump;
+	block_start += BLOCK_LENGTH;
+	}
+	
+
+	free(block);
+}
+
 #if !NNP_INFERENCE_ONLY
 void nnp_ifft16x16_with_offset__scalar(
 	const float transform[restrict static 1],
@@ -73,6 +129,7 @@ void nnp_ifft16x16_with_bias__sve(
 	size_t transform_stride, size_t data_stride,
 	uint32_t row_count, uint32_t column_count)
 {
+	//printf("row_count: %d, column_count: %d\n", row_count, column_count);
 
 	transform_stride /= sizeof(float);
 	const int simd_width = nnp_hwinfo.simd_width;

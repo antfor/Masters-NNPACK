@@ -523,6 +523,10 @@ static void init_hwinfo(void) {
 			#else
 				nnp_hwinfo.simd_width = 1;
 			#endif
+			#if NNP_BACKEND_SVE
+				nnp_hwinfo.transforms.fft16x16_kernel = (nnp_transform_2d_with_offset) nnp_fft16x16_kernel__sve;
+				//nnp_hwinfo.transforms.fft16x16_kernel = (nnp_transform_2d_with_channels) nnp_fft16x16_kernel__sve;
+			#endif
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_store = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_stream = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 #if !NNP_INFERENCE_ONLY

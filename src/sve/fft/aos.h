@@ -56,6 +56,7 @@ inline static void aos8_offset(const bool *n, size_t stride, svuint32_t *t_n_off
 	cSum_n[6] = cSum_n[5] + n[6];
 
 	//*t_n_offset = index8(0, cSum_n[0] * stride * 4, cSum_n[1] * stride * 4, cSum_n[2] * stride * 4, cSum_n[3] * stride * 4, cSum_n[4] * stride * 4, cSum_n[5] * stride * 4, cSum_n[6] * stride * 4, 1 * 4);
+    //fft8xNr_channel depend on jump now 4 it is 4
     *t_n_offset = indexA(svptrue_b32(), (uint32_t []){0,cSum_n[0] * stride * 4, cSum_n[1] * stride * 4, cSum_n[2] * stride * 4, cSum_n[3] * stride * 4, cSum_n[4] * stride * 4, cSum_n[5] * stride * 4, cSum_n[6] * stride * 4}, 8 ,1 * 4);
 }
 

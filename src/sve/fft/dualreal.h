@@ -4,6 +4,8 @@
 #include <arm_sve.h>
 #include <nnpack/hwinfo.h>
 
+#include <sve/fft/sve-print.h>
+
 
 static inline void sve_fft8x8_dualreal_128(float block[restrict static 16]){
 	float w[16] = {block[0], block[1],
@@ -150,7 +152,7 @@ static inline void sve_ifft8x8_dualreal(const float transform[restrict static 1]
 
 //-16------------------------------------------------------------------------
 
-static inline void dualreal_Nbyte(float tf[restrict static 32], int N, int offset){
+static inline void dualreal_Nbyte(float tf[restrict static 32], int N, int offset, int channels, int BLOCK_LENGTH){
 
 
 	svbool_t pg;
@@ -161,17 +163,25 @@ static inline void dualreal_Nbyte(float tf[restrict static 32], int N, int offse
 	svfloat32_t xr, xN_r, Fr, Gr, dif;
 	size_t numVals = svcntw()/N;
 
-	svuint32_t indr =   index2(0 + offset/2, N + offset/2, 1);
-	svuint32_t indN_r = index2(N -1, N -1 + N, -1);
+	//svuint32_t indr =   index2(0 + offset/2, N + offset/2, 1);
+	//svuint32_t indN_r = index2(N -1, N -1 + N, -1);
+	
+	svuint32_t indr = indexN(all, 0, 1, BLOCK_LENGTH, N/2);
+	indr = svzip1(indr, svadd_m(all, indr, N));
+	svuint32_t indN_r = indexA(all,(uint32_t []){N-0,N-0+N,N-1,N-1+N,N-2,N-2+N,N-3,N-3+N,N-4,N-4+N,N-5,N-5+N ,N-6,N-6+N ,N-7,N-7+N ,N-8,N-8+N } ,N, BLOCK_LENGTH);
 
-	for(int row = 0; row < 1; row+=numVals){
+	svuint32_t ind_store = indexN(all, 0, 1, BLOCK_LENGTH, N);
+
+	channels -=0; 
+	for(int channel = 0; channel < channels; channel+=numVals){
 		
-		pg = svwhilelt_b32_s32(row + offset, N);
+		pg = svwhilelt_b32_s32(channel * N, N * channels);
+		
 		//load
-		xr = svld1_gather_index(pg, tf + row, indr);
+		xr = svld1_gather_index(pg, tf + channel * BLOCK_LENGTH, indr);
 		xr = svmul_m(pg, xr, 0.5f);
 
-		xN_r = svld1_gather_index(pg, tf + row, indN_r);
+		xN_r = svld1_gather_index(pg, tf + channel * BLOCK_LENGTH, indN_r);
 		xN_r = svmul_m(pg, xN_r, half_conjugate);
 
 		Fr = svadd_m(pg, xN_r, xr);
@@ -180,23 +190,45 @@ static inline void dualreal_Nbyte(float tf[restrict static 32], int N, int offse
 		cmul_twiddle(&pg, &dif, &i, &Gr);
 
 		//store
-		svst1(pg, tf + row + 0  + offset, svtrn1(Fr, Gr));
-		svst1(pg, tf + row + N + offset, svtrn2(Fr, Gr));
+		svst1_scatter_index(pg, tf + channel * BLOCK_LENGTH + 0, ind_store, svtrn1(Fr, Gr));
+		svst1_scatter_index(pg, tf + channel * BLOCK_LENGTH + N, ind_store, svtrn2(Fr, Gr));
 	}
 }
 
 static inline void sve_fft16x16_dualreal(float tf[restrict static 32]){
 
+	float x0 = tf[0 + 0];
 	float y0 = tf[0 + 16];
 	float x8 = tf[8 + 0];
 	float y8 = tf[8 + 16];
 
-	dualreal_Nbyte(tf, 16, 2);
+	dualreal_Nbyte(tf, 16, 2, 1, 256);
 
+	tf[0 + 0] = x0;
 	tf[0 + 1] = y0;
 	tf[0 + 16] = x8;
 	tf[1 + 16] = y8;
 
+}
+
+
+static inline void sve_fft16x16_dualreal_kernel(float tf[restrict static 32], int channels){
+
+	const int BLOCK_LENGTH = 256; 
+	svbool_t pg = svwhilelt_b32_s32(0,channels);
+	svuint32_t index =svindex_u32(0, BLOCK_LENGTH);
+
+	svfloat32_t x0 = svld1_gather_index(pg, tf + 0 + 0, index);
+	svfloat32_t y0 = svld1_gather_index(pg, tf + 0 + 16, index);
+	svfloat32_t x8 = svld1_gather_index(pg, tf + 8 + 0, index);
+	svfloat32_t y8 = svld1_gather_index(pg, tf + 8 + 16, index);
+
+	dualreal_Nbyte(tf, 16, 2, channels, BLOCK_LENGTH);
+
+	svst1_scatter_index(pg, tf + 0 + 0,  index, x0);
+	svst1_scatter_index(pg, tf + 0 + 1,  index, y0);
+	svst1_scatter_index(pg, tf + 0 + 16, index, x8);
+	svst1_scatter_index(pg, tf + 1 + 16, index, y8);
 }
 
 static inline void idualreal_Nbyte(float tf[restrict static 32], int N, int offset){

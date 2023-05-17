@@ -172,7 +172,7 @@ static inline void sve_fft8x8_complex(
 
     const uint32_t BLOCK_SIZE = 8;
     const uint32_t LENGTH = 64;
-    const int HALF_LENGTH = 128;
+    const int HALF_LENGTH = 32;
     const uint64_t numVals = svcntw()/BLOCK_SIZE; 
 
     const svfloat32_t twiddle_1 = svzip1(svdupq_f32(COS_0PI_OVER_4, COS_1PI_OVER_4, COS_2PI_OVER_4, COS_3PI_OVER_4), svdupq_f32(SIN_0PI_OVER_4, SIN_1PI_OVER_4, SIN_2PI_OVER_4, SIN_3PI_OVER_4));
