@@ -11,7 +11,7 @@
 #include <nnpack/relu.h>
 #include <nnpack/softmax.h>
 
-#if NNP_BACKEND_SVE || NNP_BACKEND_SCALAR
+#if NNP_BACKEND_SVE
 #include <arm_sve.h>
 #endif
 #include <stdio.h>

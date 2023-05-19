@@ -388,6 +388,13 @@ SET(NNPACK_BACKEND_SRCS
       src/scalar/blas/sdotxf.c
       src/scalar/blas/shdotxf.c)
   ENDIF()
+  IF(NOT NNPACK_INFERENCE_ONLY)
+  LIST(APPEND NNPACK_BACKEND_SRCS
+    # Tuple GEMM
+    src/scalar/blas/s2gemm-transc.c
+    src/scalar/blas/cgemm.c
+    src/scalar/blas/cgemm-conjb-transc.c)
+  ENDIF()
 ELSEIF(NNPACK_BACKEND STREQUAL "riscvv")
 SET(NNPACK_BACKEND_SRCS
     # Transformations
@@ -395,8 +402,9 @@ SET(NNPACK_BACKEND_SRCS
     src/riscvv/2d-fourier-16x16.c
     src/scalar/2d-winograd-8x8-3x3.c
     # Tuple GEMM
+    src/riscv/blas/s2gemm.c
     src/scalar/blas/s2gemm.c
-    src/scalar/blas/cgemm-conjb.c
+    src/riscv/blas/cgemm-conjb.c
     # Direct convolution
     src/scalar/blas/conv1x1.c
     # BLAS microkernels
