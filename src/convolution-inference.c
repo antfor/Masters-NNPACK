@@ -653,7 +653,7 @@ static enum nnp_status compute_fast_convolution_inference(
 					nnp_fast_tuple_gemm_function fast_gemm_function;
 					if (fourier_transform) {
 
-						#if NNP_BACKEND_SVE
+						#if NNP_BACKEND_SVE || NNP_BACKEND_RISCV
 							if(tile_size.height == 8){
 								if (tuple_index < NNP_COMPLEX_TUPLE_INDEX) {
 									fast_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_only_mr_x_nr;
@@ -664,11 +664,11 @@ static enum nnp_status compute_fast_convolution_inference(
 								}
 							}else if(tile_size.height == 16){
 								if (tuple_index < NNP_COMPLEX_TUPLE_INDEX) {
-									fast_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_only_mr_x_nr_2048;
-									full_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_upto_mr_x_nr_2048;
+									fast_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_only_mr_x_nr_FFT16;
+									full_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_upto_mr_x_nr_FFT16;
 								} else {
-									fast_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_only_mr_x_nr_2048;
-									full_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_upto_mr_x_nr_2048;
+									fast_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_only_mr_x_nr_FFT16;
+									full_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_upto_mr_x_nr_FFT16;
 								}
 							}
 						#else
@@ -958,7 +958,7 @@ static enum nnp_status compute_fast_convolution_inference_channel(
 					nnp_fast_tuple_gemm_function fast_gemm_function;
 					if (fourier_transform) {
 
-						#if NNP_BACKEND_SVE
+						#if NNP_BACKEND_SVE || NNP_BACKEND_RISCV
 							if(tile_size.height == 8){
 								if (tuple_index < NNP_COMPLEX_TUPLE_INDEX) {
 									fast_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_only_mr_x_nr;
@@ -969,11 +969,11 @@ static enum nnp_status compute_fast_convolution_inference_channel(
 								}
 							}else if(tile_size.height == 16){
 								if (tuple_index < NNP_COMPLEX_TUPLE_INDEX) {
-									fast_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_only_mr_x_nr_2048;
-									full_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_upto_mr_x_nr_2048;
+									fast_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_only_mr_x_nr_FFT16;
+									full_gemm_function = nnp_hwinfo.cxgemm.s4cX_conjb_upto_mr_x_nr_FFT16;
 								} else {
-									fast_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_only_mr_x_nr_2048;
-									full_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_upto_mr_x_nr_2048;
+									fast_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_only_mr_x_nr_FFT16;
+									full_gemm_function = nnp_hwinfo.cxgemm.cX_conjb_upto_mr_x_nr_FFT16;
 								}
 							}
 						#else

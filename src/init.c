@@ -518,6 +518,8 @@ static void init_hwinfo(void) {
 			#if NNP_BACKEND_SVE
 				nnp_hwinfo.simd_width = svcntw();
 				printf("SVE width: %d\n", nnp_hwinfo.simd_width);
+			#elif NNP_BACKEND_RISCV
+				nnp_hwinfo.simd_width =  __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
 			#else
 				nnp_hwinfo.simd_width = 1;
 			#endif
@@ -598,14 +600,24 @@ static void init_hwinfo(void) {
 				#elif NNP_BACKEND_SVE
 				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2__sve,
 				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2__sve,
-
-				.s4cX_conjb_only_mr_x_nr_2048 = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_2048__sve,
-				.s4cX_conjb_upto_mr_x_nr_2048 = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_2048__sve,			
+				.s4cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_2048__sve,
+				.s4cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_2048__sve,			
 
 				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2__sve,
 				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2__sve,
-				.cX_conjb_only_mr_x_nr_2048 = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_2048__sve,
-				.cX_conjb_upto_mr_x_nr_2048 = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_2048__sve,
+				.cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_2048__sve,
+				.cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_2048__sve,
+				#elif NNP_BACKEND_RISCV
+				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_FFT8x8__riscvv,
+				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_FFT8x8__riscvv,
+				.s4cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_FFT16x16__riscvv,
+				.s4cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_FFT16x16__riscvv,			
+
+				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_FFT8x8__riscvv,
+				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_FFT8x8__riscvv,
+				.cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_FFT16x16__riscvv,
+				.cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_FFT16x16__riscvv,
+
 				#endif
 #if !NNP_INFERENCE_ONLY
 				.s4cX_conjb_transc_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_transc_only_2x2__scalar,
