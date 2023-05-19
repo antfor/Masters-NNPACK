@@ -11,6 +11,11 @@
 #include <nnpack/relu.h>
 #include <nnpack/softmax.h>
 
+#if NNP_BACKEND_SVE || NNP_BACKEND_SCALAR
+#include <arm_sve.h>
+#endif
+#include <stdio.h>
+
 struct hardware_info nnp_hwinfo = { };
 static pthread_once_t hwinfo_init_control = PTHREAD_ONCE_INIT;
 
@@ -510,7 +515,16 @@ static void init_hwinfo(void) {
 			};
 			nnp_hwinfo.supported = cpuinfo_has_arm_neon();
 		#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE || NNP_BACKEND_RISCV
-			nnp_hwinfo.simd_width = 1;
+			#if NNP_BACKEND_SVE
+				nnp_hwinfo.simd_width = svcntw();
+				printf("SVE width: %d\n", nnp_hwinfo.simd_width);
+			#else
+				nnp_hwinfo.simd_width = 1;
+			#endif
+			#if NNP_BACKEND_SVE
+				nnp_hwinfo.transforms.fft16x16_kernel = (nnp_transform_2d_with_offset) nnp_fft16x16_kernel__sve;
+				//nnp_hwinfo.transforms.fft16x16_kernel = (nnp_transform_2d_with_channels) nnp_fft16x16_kernel__sve;
+			#endif
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_store = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_stream = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 #if !NNP_INFERENCE_ONLY
@@ -576,10 +590,23 @@ static void init_hwinfo(void) {
 				.cX_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_only_2x2__scalar,
 				.cX_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_upto_2x2__scalar,
 #endif /* !NNP_INFERENCE_ONLY */
+				#if NNP_BACKEND_SCALAR
 				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2__scalar,
 				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2__scalar,
 				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2__scalar,
 				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2__scalar,
+				#elif NNP_BACKEND_SVE
+				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2__sve,
+				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2__sve,
+
+				.s4cX_conjb_only_mr_x_nr_2048 = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_2048__sve,
+				.s4cX_conjb_upto_mr_x_nr_2048 = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_2048__sve,			
+
+				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2__sve,
+				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2__sve,
+				.cX_conjb_only_mr_x_nr_2048 = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_2048__sve,
+				.cX_conjb_upto_mr_x_nr_2048 = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_2048__sve,
+				#endif
 #if !NNP_INFERENCE_ONLY
 				.s4cX_conjb_transc_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_transc_only_2x2__scalar,
 				.s4cX_conjb_transc_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_transc_upto_2x2__scalar,

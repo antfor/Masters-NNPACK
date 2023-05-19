@@ -20,6 +20,10 @@
 	#if !(NNP_BACKEND_SCALAR)
 		#error NNP_BACKEND_SCALAR predefined as 0
 	#endif
+#elif defined(NNP_BACKEND_SVE)
+	#if !(NNP_BACKEND_SVE)
+		#error NNP_BACKEND_SCALAR predefined as 0
+	#endif
 #elif defined(__arm__) || defined(__aarch64__)
 	#define NNP_BACKEND_ARM 1
 #elif defined(__riscv) 
