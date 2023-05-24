@@ -2,13 +2,12 @@
 #include <stddef.h>
 
 #include <riscvv/fft/real.h>
-#include <riscvv/fft/soa.h>
 #include <riscvv/fft/dualreal.h>
 
 #include <nnpack/utils.h>
 #include <nnpack/activations.h>
 
-#include <nnpack/hwinfo.h>
+#include <riscvv/fft/rv-printf.h>
 
 #define BLOCK_SIZE 8
 #define BLOCK_LENGTH 64
@@ -30,8 +29,104 @@ void nnp_fft8x8_with_offset__riscvv(
 	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
 
 	riscvv_fft8xN_real(row0, row4, data_stride, row_offset, row_count, column_offset, column_count, block);
+	
+	//printf("real\n");
+	//fprint_array_f(block, 8*8, 8);
 
-	complex_256(block, transform, transform_stride);
+	riscvv_fft8x8_complex(block);
+
+	riscvv_fft8x8_dualreal(block);
+
+	//store
+	const uint64_t simd_width = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1); // nnp_hwinfo.simd_width;
+	uint32_t jump = imin(HALF_BLOCK_LENGTH, simd_width);
+	uint32_t gvl = __builtin_epi_vsetvl(jump, __epi_e32, __epi_m1);
+	uint32_t jumps = idiv_ceil(HALF_BLOCK_LENGTH, jump);
+
+	__epi_2xf32 real, imag;
+	__epi_2xi32 ind_load = rvindex_adress(0,2,gvl); 
+
+	for(uint32_t i = 0; i < jumps; i++){
+
+		real = __builtin_epi_vload_indexed_2xf32(block + i * jump * 2 + 0, ind_load, gvl);
+		imag = __builtin_epi_vload_indexed_2xf32(block + i * jump * 2 + 1, ind_load, gvl);
+
+		__builtin_epi_vstore_2xf32(transform + 0, real, gvl);
+		__builtin_epi_vstore_2xf32(transform + jump, imag, gvl);
+		transform += transform_stride;
+	}
+
+}
+
+
+void nnp_ifft8x8_with_bias__riscvv(
+	const float transform[restrict static 1],
+	float data[restrict static 1],
+	const float bias[restrict static 1],
+	size_t transform_stride, size_t data_stride,
+	uint32_t row_count, uint32_t column_count)
+{
+	transform_stride /= sizeof(float);
+
+	float block[BLOCK_SIZE*BLOCK_SIZE];
+
+	riscvv_ifft8x8_dualreal(transform, transform_stride, block);
+
+	block[0] += (*bias) * 64.0f;
+
+	riscvv_ifft8x8_complex(block);
+
+	riscvv_ifft8x8_real(block, column_count);
+
+	//todo vectorize
+	for (size_t row = 0; row < row_count; row++) {
+		for (size_t column = 0; column < column_count; column++) {
+			data[row * data_stride + column] = block[row + column * BLOCK_SIZE];
+		}
+	}
+
+}
+
+
+void nnp_ifft8x8_with_bias_with_relu__riscvv(
+	const float transform[restrict static 1],
+	float data[restrict static 1],
+	const float bias[restrict static 1],
+	size_t transform_stride, size_t data_stride,
+	uint32_t row_count, uint32_t column_count)
+{
+	transform_stride /= sizeof(float);
+
+	float block[BLOCK_SIZE*BLOCK_SIZE];
+
+	riscvv_ifft8x8_dualreal(transform, transform_stride, block);
+
+	block[0] += (*bias) * 64.0f;
+
+	riscvv_ifft8x8_complex(block);
+
+	riscvv_ifft8x8_real(block, column_count);
+
+	//todo vectorize
+	for (size_t row = 0; row < row_count; row++) {
+		for (size_t column = 0; column < column_count; column++) {
+			data[row * data_stride + column] = relu(block[row + column * BLOCK_SIZE],0);
+		}
+	}
+
+}
+
+//--scalar-----------------------------------------------------
+
+
+void nnp_fft8x8_with_offset__scalar(
+	const float data[restrict static 1],
+	float transform[restrict static 1],
+	size_t data_stride, size_t transform_stride,
+	uint32_t row_count, uint32_t column_count,
+	uint32_t row_offset, uint32_t column_offset)
+{
+	nnp_fft8x8_with_offset__riscvv(data, transform, data_stride, transform_stride, row_count, column_count, row_offset, column_offset);
 }
 
 #if !NNP_INFERENCE_ONLY
@@ -42,90 +137,7 @@ void nnp_ifft8x8_with_offset__scalar(
 	uint32_t row_count, uint32_t column_count,
 	uint32_t row_offset, uint32_t column_offset)
 {
-	transform_stride /= sizeof(float);
 
-	float block[BLOCK_SIZE][BLOCK_SIZE];
-	{
-		const float x0 = transform[0];
-		const float x4 = transform[1];
-		transform += transform_stride;
-		const float y0 = transform[0];
-		const float y4 = transform[1];
-		transform += transform_stride;
-		const float x1r = transform[0];
-		const float x1i = transform[1];
-		transform += transform_stride;
-		const float y1r = transform[0];
-		const float y1i = transform[1];
-		transform += transform_stride;
-		const float x2r = transform[0];
-		const float x2i = transform[1];
-		transform += transform_stride;
-		const float y2r = transform[0];
-		const float y2i = transform[1];
-		transform += transform_stride;
-		const float x3r = transform[0];
-		const float x3i = transform[1];
-		transform += transform_stride;
-		const float y3r = transform[0];
-		const float y3i = transform[1];
-		transform += transform_stride;
-		scalar_ifft8_dualreal(
-			x0, y0, x1r, y1r, x2r, y2r, x3r, y3r,
-			x4, y4, x1i, y1i, x2i, y2i, x3i, y3i,
-			&block[0][0]);
-	}
-	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
-		const float f0r = transform[0];
-		const float f0i = transform[1];
-		transform += transform_stride;
-		const float f1r = transform[0];
-		const float f1i = transform[1];
-		transform += transform_stride;
-		const float f2r = transform[0];
-		const float f2i = transform[1];
-		transform += transform_stride;
-		const float f3r = transform[0];
-		const float f3i = transform[1];
-		transform += transform_stride;
-		const float f4r = transform[0];
-		const float f4i = transform[1];
-		transform += transform_stride;
-		const float f5r = transform[0];
-		const float f5i = transform[1];
-		transform += transform_stride;
-		const float f6r = transform[0];
-		const float f6i = transform[1];
-		transform += transform_stride;
-		const float f7r = transform[0];
-		const float f7i = transform[1];
-		transform += transform_stride;
-		scalar_ifft8_soa(
-			f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r,
-			f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i,
-			&block[row][0]);
-	}
-
-	for (uint32_t column = 0; column < BLOCK_SIZE; column++) {
-		const float f0  = block[0][column];
-		const float f4  = block[1][column];
-		const float f1r = block[2][column];
-		const float f1i = block[3][column];
-		const float f2r = block[4][column];
-		const float f2i = block[5][column];
-		const float f3r = block[6][column];
-		const float f3i = block[7][column];
-		scalar_ifft8_real(
-			f0, f4, f1r, f1i, f2r, f2i, f3r, f3i,
-			&block[0][column], &block[BLOCK_SIZE / 2][column],
-			BLOCK_SIZE);
-	}
-
-	for (uint32_t row = 0; row < row_count; row++) {
-		for (uint32_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = block[row_offset + row][column_offset + column];
-		}
-	}
 }
 #endif /* !NNP_INFERENCE_ONLY */
 
@@ -136,92 +148,8 @@ void nnp_ifft8x8_with_bias__scalar(
 	size_t transform_stride, size_t data_stride,
 	uint32_t row_count, uint32_t column_count)
 {
-	transform_stride /= sizeof(float);
-
-	float block[BLOCK_SIZE][BLOCK_SIZE];
-
-	const float bias_value = *bias;
-	{
-		const float x0 = transform[0] + bias_value * 64.0f;
-		const float x4 = transform[1];
-		transform += transform_stride;
-		const float y0 = transform[0];
-		const float y4 = transform[1];
-		transform += transform_stride;
-		const float x1r = transform[0];
-		const float x1i = transform[1];
-		transform += transform_stride;
-		const float y1r = transform[0];
-		const float y1i = transform[1];
-		transform += transform_stride;
-		const float x2r = transform[0];
-		const float x2i = transform[1];
-		transform += transform_stride;
-		const float y2r = transform[0];
-		const float y2i = transform[1];
-		transform += transform_stride;
-		const float x3r = transform[0];
-		const float x3i = transform[1];
-		transform += transform_stride;
-		const float y3r = transform[0];
-		const float y3i = transform[1];
-		transform += transform_stride;
-		scalar_ifft8_dualreal(
-			x0, y0, x1r, y1r, x2r, y2r, x3r, y3r,
-			x4, y4, x1i, y1i, x2i, y2i, x3i, y3i,
-			&block[0][0]);
-	}
-	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
-		const float f0r = transform[0];
-		const float f0i = transform[1];
-		transform += transform_stride;
-		const float f1r = transform[0];
-		const float f1i = transform[1];
-		transform += transform_stride;
-		const float f2r = transform[0];
-		const float f2i = transform[1];
-		transform += transform_stride;
-		const float f3r = transform[0];
-		const float f3i = transform[1];
-		transform += transform_stride;
-		const float f4r = transform[0];
-		const float f4i = transform[1];
-		transform += transform_stride;
-		const float f5r = transform[0];
-		const float f5i = transform[1];
-		transform += transform_stride;
-		const float f6r = transform[0];
-		const float f6i = transform[1];
-		transform += transform_stride;
-		const float f7r = transform[0];
-		const float f7i = transform[1];
-		transform += transform_stride;
-		scalar_ifft8_soa(
-			f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r,
-			f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i,
-			&block[row][0]);
-	}
-
-	for (uint32_t column = 0; column < BLOCK_SIZE; column++) {
-		const float f0  = block[0][column];
-		const float f4  = block[1][column];
-		const float f1r = block[2][column];
-		const float f1i = block[3][column];
-		const float f2r = block[4][column];
-		const float f2i = block[5][column];
-		const float f3r = block[6][column];
-		const float f3i = block[7][column];
-		scalar_ifft8_real(
-			f0, f4, f1r, f1i, f2r, f2i, f3r, f3i,
-			&block[0][column], &block[BLOCK_SIZE / 2][column],
-			BLOCK_SIZE);
-	}
-
-	for (uint32_t row = 0; row < row_count; row++) {
-		for (uint32_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = block[row][column];
-		}
-	}
+	
+	nnp_ifft8x8_with_bias__riscvv(transform, data, bias, transform_stride, data_stride, row_count, column_count);
 }
 
 void nnp_ifft8x8_with_bias_with_relu__scalar(
@@ -231,90 +159,7 @@ void nnp_ifft8x8_with_bias_with_relu__scalar(
 	size_t transform_stride, size_t data_stride,
 	uint32_t row_count, uint32_t column_count)
 {
-	transform_stride /= sizeof(float);
-
-	float block[BLOCK_SIZE][BLOCK_SIZE];
-
-	const float bias_value = *bias;
-	{
-		const float x0 = transform[0] + bias_value * 64.0f;
-		const float x4 = transform[1];
-		transform += transform_stride;
-		const float y0 = transform[0];
-		const float y4 = transform[1];
-		transform += transform_stride;
-		const float x1r = transform[0];
-		const float x1i = transform[1];
-		transform += transform_stride;
-		const float y1r = transform[0];
-		const float y1i = transform[1];
-		transform += transform_stride;
-		const float x2r = transform[0];
-		const float x2i = transform[1];
-		transform += transform_stride;
-		const float y2r = transform[0];
-		const float y2i = transform[1];
-		transform += transform_stride;
-		const float x3r = transform[0];
-		const float x3i = transform[1];
-		transform += transform_stride;
-		const float y3r = transform[0];
-		const float y3i = transform[1];
-		transform += transform_stride;
-		scalar_ifft8_dualreal(
-			x0, y0, x1r, y1r, x2r, y2r, x3r, y3r,
-			x4, y4, x1i, y1i, x2i, y2i, x3i, y3i,
-			&block[0][0]);
-	}
-	for (uint32_t row = 2; row < BLOCK_SIZE; row += 2) {
-		const float f0r = transform[0];
-		const float f0i = transform[1];
-		transform += transform_stride;
-		const float f1r = transform[0];
-		const float f1i = transform[1];
-		transform += transform_stride;
-		const float f2r = transform[0];
-		const float f2i = transform[1];
-		transform += transform_stride;
-		const float f3r = transform[0];
-		const float f3i = transform[1];
-		transform += transform_stride;
-		const float f4r = transform[0];
-		const float f4i = transform[1];
-		transform += transform_stride;
-		const float f5r = transform[0];
-		const float f5i = transform[1];
-		transform += transform_stride;
-		const float f6r = transform[0];
-		const float f6i = transform[1];
-		transform += transform_stride;
-		const float f7r = transform[0];
-		const float f7i = transform[1];
-		transform += transform_stride;
-		scalar_ifft8_soa(
-			f0r, f1r, f2r, f3r, f4r, f5r, f6r, f7r,
-			f0i, f1i, f2i, f3i, f4i, f5i, f6i, f7i,
-			&block[row][0]);
-	}
-
-	for (uint32_t column = 0; column < BLOCK_SIZE; column++) {
-		const float f0  = block[0][column];
-		const float f4  = block[1][column];
-		const float f1r = block[2][column];
-		const float f1i = block[3][column];
-		const float f2r = block[4][column];
-		const float f2i = block[5][column];
-		const float f3r = block[6][column];
-		const float f3i = block[7][column];
-		scalar_ifft8_real(
-			f0, f4, f1r, f1i, f2r, f2i, f3r, f3i,
-			&block[0][column], &block[BLOCK_SIZE / 2][column],
-			BLOCK_SIZE);
-	}
-
-	for (uint32_t row = 0; row < row_count; row++) {
-		for (uint32_t column = 0; column < column_count; column++) {
-			data[row * data_stride + column] = relu(block[row][column], 0.0f);
-		}
-	}
+	
+	nnp_ifft8x8_with_bias_with_relu__riscvv(transform, data, bias, transform_stride, data_stride, row_count, column_count);
 }
+

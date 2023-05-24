@@ -2,20 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <nnpack/hwinfo.h>
-//static struct Snnp_hwinfo{size_t simd_width;}nnp_hwinfo = {4};
-
 #include <riscvv/fft/fft-util.h>
-//#include <../fft/fft-util.h>
-
-/*
-void initS(){
-
-    nnp_hwinfo.simd_width = 4;//__builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
-
- }
- */
-
 //--Split--------------------------------------------------------------------
 
 void nnp_sVLc2gemm_conjb_only_2x2_Split__riscvv(
@@ -27,8 +14,9 @@ void nnp_sVLc2gemm_conjb_only_2x2_Split__riscvv(
     int max_simd_width)
 {
     //init
-    const size_t simd_width = imin(nnp_hwinfo.simd_width, max_simd_width);
-    const size_t split_channels = imax(nnp_hwinfo.simd_width / max_simd_width, 1);
+    int nnp_hwinfo_simd_width = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
+    const size_t simd_width = imin(nnp_hwinfo_simd_width, max_simd_width);
+    const size_t split_channels = imax(nnp_hwinfo_simd_width / max_simd_width, 1);
 
     long gvl = __builtin_epi_vsetvl(imin(split_channels * simd_width, k * simd_width), __epi_e32, __epi_m1);
 
@@ -50,7 +38,7 @@ void nnp_sVLc2gemm_conjb_only_2x2_Split__riscvv(
     __epi_2xf32  rvAcc10i =  __builtin_epi_vfmv_v_f_2xf32(0.0f, gvl);
     __epi_2xf32  rvAcc11i =  __builtin_epi_vfmv_v_f_2xf32(0.0f, gvl);
 
-    const __epi_2xi32 ind_load = indexN(gvl, 0, 1, simd_width * 4, simd_width);
+    const __epi_2xi32 ind_load = indexN_address(gvl, 0, 1, simd_width * 4, simd_width);
 
    
     int N = idiv_ceil(k, split_channels);
@@ -159,8 +147,9 @@ void nnp_sVLc2gemm_conjb_upto_2x2_Split__riscvv(
     int max_simd_width)
 {
     //init
-    const size_t simd_width = imin(nnp_hwinfo.simd_width, max_simd_width);
-    const size_t split_channels = imax(nnp_hwinfo.simd_width / max_simd_width, 1);
+    int nnp_hwinfo_simd_width = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
+    const size_t simd_width = imin(nnp_hwinfo_simd_width, max_simd_width);
+    const size_t split_channels = imax(nnp_hwinfo_simd_width / max_simd_width, 1);
 
     long gvl = __builtin_epi_vsetvl(imin(split_channels * simd_width, k * simd_width), __epi_e32, __epi_m1);
 
@@ -185,8 +174,8 @@ void nnp_sVLc2gemm_conjb_upto_2x2_Split__riscvv(
     int lenA = mr * 2; // 2 for complex
 	int lenB = nr * 2; 
 
-    const __epi_2xi32 ind_loadA = indexN(gvl, 0, 1, simd_width * lenA, simd_width);
-    const __epi_2xi32 ind_loadB = indexN(gvl, 0, 1, simd_width * lenB, simd_width);
+    const __epi_2xi32 ind_loadA = indexN_address(gvl, 0, 1, simd_width * lenA, simd_width);
+    const __epi_2xi32 ind_loadB = indexN_address(gvl, 0, 1, simd_width * lenB, simd_width);
 
    
     int N = idiv_ceil(k, split_channels);
@@ -577,10 +566,9 @@ void nnp_s2gemm_only_2x2_FFT8x8__riscvv(
 	size_t row_stride_c)
 {
 	int max_simd_width = 32;
-    //max_simd_width = 4;//todo remove
-
-	if(nnp_hwinfo.simd_width / max_simd_width  < 2){
-		nnp_sVLc2gemm_conjb_only_2x2__riscvv(k, update, a, b, c, row_stride_c, nnp_hwinfo.simd_width);
+    int nnp_hwinfo_simd_width = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
+	if(nnp_hwinfo_simd_width / max_simd_width  < 2){
+		nnp_sVLc2gemm_conjb_only_2x2__riscvv(k, update, a, b, c, row_stride_c, nnp_hwinfo_simd_width);
 	}else{
 		nnp_sVLc2gemm_conjb_only_2x2_Split__riscvv(k, update, a, b, c, row_stride_c, max_simd_width);
 	}
@@ -598,10 +586,10 @@ void nnp_s2gemm_upto_2x2_FFT8x8__riscvv(
 {
 
 	int max_simd_width = 32;
-    //max_simd_width = 4;//todo remove
+    int nnp_hwinfo_simd_width = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
 
-	if(nnp_hwinfo.simd_width / max_simd_width  < 2){
-		nnp_sVLc2gemm_conjb_upto_2x2__riscvv(mr, nr, k, update, a, b, c, row_stride_c, nnp_hwinfo.simd_width);
+	if(nnp_hwinfo_simd_width / max_simd_width  < 2){
+		nnp_sVLc2gemm_conjb_upto_2x2__riscvv(mr, nr, k, update, a, b, c, row_stride_c, nnp_hwinfo_simd_width);
 	}else{
 		nnp_sVLc2gemm_conjb_upto_2x2_Split__riscvv(mr, nr, k, update, a, b, c, row_stride_c, max_simd_width);
 	}
@@ -619,9 +607,10 @@ void nnp_s2gemm_only_2x2_FFT16x16__riscvv(
 	size_t row_stride_c)
 {
 	int max_simd_width = 128;
+    int nnp_hwinfo_simd_width = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
 
-	if(nnp_hwinfo.simd_width / max_simd_width  < 2){
-		nnp_sVLc2gemm_conjb_only_2x2__riscvv(k, update, a, b, c, row_stride_c, nnp_hwinfo.simd_width);
+	if(nnp_hwinfo_simd_width / max_simd_width  < 2){
+		nnp_sVLc2gemm_conjb_only_2x2__riscvv(k, update, a, b, c, row_stride_c, nnp_hwinfo_simd_width);
 	}else{
 		nnp_sVLc2gemm_conjb_only_2x2_Split__riscvv(k, update, a, b, c, row_stride_c, max_simd_width);
 	}
@@ -639,9 +628,10 @@ void nnp_s2gemm_upto_2x2_FFT16x16__riscvv(
 {
 
 	int max_simd_width = 128;
+    int nnp_hwinfo_simd_width = __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
 
-	if(nnp_hwinfo.simd_width / max_simd_width  < 2){
-		nnp_sVLc2gemm_conjb_upto_2x2__riscvv(mr, nr, k, update, a, b, c, row_stride_c, nnp_hwinfo.simd_width);
+	if(nnp_hwinfo_simd_width / max_simd_width  < 2){
+		nnp_sVLc2gemm_conjb_upto_2x2__riscvv(mr, nr, k, update, a, b, c, row_stride_c, nnp_hwinfo_simd_width);
 	}else{
 		nnp_sVLc2gemm_conjb_upto_2x2_Split__riscvv(mr, nr, k, update, a, b, c, row_stride_c, max_simd_width);
 	}
