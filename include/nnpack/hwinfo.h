@@ -159,7 +159,7 @@ struct cxgemm {
 	nnp_full_tuple_gemm_function s4cX_conjb_upto_mr_x_nr;
 	nnp_fast_tuple_gemm_function cX_conjb_only_mr_x_nr;
 	nnp_full_tuple_gemm_function cX_conjb_upto_mr_x_nr;
-	#if NNP_BACKEND_SVE
+	#if NNP_BACKEND_SVE || NNP_BACKEND_RISCV
 	nnp_fast_tuple_gemm_function s4cX_conjb_only_mr_x_nr_FFT16;
 	nnp_full_tuple_gemm_function s4cX_conjb_upto_mr_x_nr_FFT16;
 	nnp_fast_tuple_gemm_function cX_conjb_only_mr_x_nr_FFT16;
