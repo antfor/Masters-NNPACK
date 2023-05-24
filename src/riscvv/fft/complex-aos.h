@@ -42,21 +42,21 @@ inline static void fft4xNr(
 	
 	// Offsets and masks
     const uint32_t row_end = row_start + row_count;
-    const uint32_t a_pred[4] = {row_start <= 0, row_start <= 1, row_start <= 2, row_start <= 3};
-	__epi_2xi32 t_lo_offset_r = aos4_offset_r(&a_pred, stride_t, gvl);
-	__epi_2xi32 t_lo_offset_i = aos4_offset_i(&a_pred, stride_t, gvl);
+    uint32_t a_pred[4] = {row_start <= 0, row_start <= 1, row_start <= 2, row_start <= 3};
+	__epi_2xi32 t_lo_offset_r = aos4_offset_r(&a_pred[0], stride_t, gvl);
+	__epi_2xi32 t_lo_offset_i = aos4_offset_i(&a_pred[0], stride_t, gvl);
 
-    const uint32_t b_pred[4] = {row_start <= 4 && row_end > 4, row_start <= 5 && row_end > 5, row_start <= 6 && row_end > 6, row_start <= 7 && row_end > 7};
-	__epi_2xi32 t_hi_offset_r = aos4_offset_r(&b_pred, stride_t, gvl);
-	__epi_2xi32 t_hi_offset_i = aos4_offset_i(&b_pred, stride_t, gvl);
+    uint32_t b_pred[4] = {row_start <= 4 && row_end > 4, row_start <= 5 && row_end > 5, row_start <= 6 && row_end > 6, row_start <= 7 && row_end > 7};
+	__epi_2xi32 t_hi_offset_r = aos4_offset_r(&b_pred[0], stride_t, gvl);
+	__epi_2xi32 t_hi_offset_i = aos4_offset_i(&b_pred[0], stride_t, gvl);
 
     uint32_t no_jump[8];
-	jump_arr(&no_jump, &a_pred, &b_pred, row_count);
+	jump_arr(&no_jump[0], &a_pred[0], &b_pred[0], row_count);
 
-	__epi_2xi1 mask_a_r = aos4_mask_a_r(&no_jump, &a_pred, &b_pred, gvl);
-	__epi_2xi1 mask_a_i = aos4_mask_a_i(&no_jump, &a_pred, &b_pred, gvl);
-	__epi_2xi1 mask_b_r = aos4_mask_b_r(&no_jump, &a_pred, &b_pred, gvl);
-	__epi_2xi1 mask_b_i = aos4_mask_b_i(&no_jump, &a_pred, &b_pred, gvl);
+	__epi_2xi1 mask_a_r = aos4_mask_a_r(&no_jump[0], &a_pred[0], &b_pred[0], gvl);
+	__epi_2xi1 mask_a_i = aos4_mask_a_i(&no_jump[0], &a_pred[0], &b_pred[0], gvl);
+	__epi_2xi1 mask_b_r = aos4_mask_b_r(&no_jump[0], &a_pred[0], &b_pred[0], gvl);
+	__epi_2xi1 mask_b_i = aos4_mask_b_i(&no_jump[0], &a_pred[0], &b_pred[0], gvl);
     __epi_2xi1 pg_mask;
     __epi_2xi32 ind_store = rvindex_adress(0, 2, gvl);
 

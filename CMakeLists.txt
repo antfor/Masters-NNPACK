@@ -402,9 +402,9 @@ SET(NNPACK_BACKEND_SRCS
     src/riscvv/2d-fourier-16x16.c
     src/scalar/2d-winograd-8x8-3x3.c
     # Tuple GEMM
-    src/riscv/blas/s2gemm.c
+    src/riscvv/blas/s2gemm.c
     src/scalar/blas/s2gemm.c
-    src/riscv/blas/cgemm-conjb.c
+    src/riscvv/blas/cgemm-conjb.c
     # Direct convolution
     src/scalar/blas/conv1x1.c
     # BLAS microkernels

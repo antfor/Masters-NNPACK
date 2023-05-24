@@ -5,13 +5,14 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <nnpack/fft-constants.h>
 
 #include<stdlib.h>
 
 // duplicate quad
 
 /// Takes an array of four values and creates a vector repeating those
-static inline __epi_2xi32 dupq_i(__uint32_t *quad, long gvl)
+static inline __epi_2xi32 dupq_i(uint32_t *quad, long gvl)
 {
 
     // ind_a = 0, 1, 2, 3, 4, 5, 6, 7, 8
@@ -31,7 +32,7 @@ static inline __epi_2xi32 dupq_i(__uint32_t *quad, long gvl)
     indices = __builtin_epi_vmul_2xi32(indices, four, gvl);
 
     // Load from indices to get vector of 4 repeating values
-    return __builtin_epi_vload_indexed_2xi32(quad, indices, gvl);
+    return __builtin_epi_vload_indexed_unsigned_2xi32(quad, indices, gvl);
 }
 
 static inline __epi_2xf32 dupq_f(float *quad, long gvl)
@@ -101,7 +102,7 @@ static inline __epi_2xi32 indexN(long gvl, __uint32_t start, __uint32_t stride, 
     return indexN_byte(gvl, start, stride, jump, N, 1);   
 }
 
-static inline __epi_2xi32 rvindex_adress(start, stride, gvl){
+static inline __epi_2xi32 rvindex_adress(int start,int stride,long gvl){
 
     __epi_2xi32 ind_n = __builtin_epi_vid_2xi32(gvl);
     ind_n = __builtin_epi_vmul_2xi32(ind_n, __builtin_epi_vmv_v_x_2xi32(stride * 4, gvl), gvl);
@@ -251,6 +252,9 @@ static inline __epi_2xi32 ctr_get_indr(
 			return indexA_address((uint32_t []){2,4,6,0+HL}, 8/2, 8, gvl);
 			break;
 	}
+
+    fprintf(stderr,"Error: not a valid BLOCK_SIZE");
+    return indexN_address(gvl, 1, 0, 0, 1);
 }
 
 static inline __epi_2xi32 ctr_get_indN_r(
@@ -267,6 +271,9 @@ static inline __epi_2xi32 ctr_get_indN_r(
 			return indexA_address((uint32_t []){6+HL,4+HL,2+HL,0+HL}, 8/2, 8, gvl);
 			break;
 	}
+
+    fprintf(stderr,"Error: not a valid BLOCK_SIZE");
+    return indexN_address(gvl, 1, 0, 0, 1);
 }
 
 
@@ -292,6 +299,9 @@ static inline __epi_2xi32 ctr_get_ind_store_bot(
 			return indexA_address((uint32_t []){6*16, 4*16, 2*16, 0*16}, 8/2, 1, gvl);
 			break;
 	}
+
+    fprintf(stderr,"Error: not a valid BLOCK_SIZE");
+    return indexN_address(gvl, 1, 0, 0, 1);
 }
 
 //-----
@@ -339,6 +349,9 @@ static inline __epi_2xf32 get_twiddle_i_top_r(int BLOCK_SIZE, long gvl){
 		return dupq_f((float []){-SIN_1PI_OVER_8, -SIN_2PI_OVER_8, -SIN_3PI_OVER_8, -SIN_4PI_OVER_8}, gvl);
 	}
 
+    fprintf(stderr,"Error: not a valid BLOCK_SIZE");
+    return dupq_f((float []){-1,-1,-1,-1},gvl);
+
 }
 
 static inline __epi_2xf32 get_twiddle_i_top_i(int BLOCK_SIZE, long gvl){
@@ -350,6 +363,9 @@ static inline __epi_2xf32 get_twiddle_i_top_i(int BLOCK_SIZE, long gvl){
 	case 8:
 		return dupq_f((float []){COS_1PI_OVER_8, COS_2PI_OVER_8, COS_3PI_OVER_8, COS_4PI_OVER_8}, gvl);
 	}
+
+    fprintf(stderr,"Error: not a valid BLOCK_SIZE");
+    return dupq_f((float []){-1,-1,-1,-1},gvl);
 
 }
 
