@@ -29,9 +29,6 @@ void nnp_fft8x8_with_offset__riscvv(
 	const float *restrict row4 = data + doz(BLOCK_SIZE / 2, row_offset) * data_stride;
 
 	riscvv_fft8xN_real(row0, row4, data_stride, row_offset, row_count, column_offset, column_count, block);
-	
-	//printf("real\n");
-	//fprint_array_f(block, 8*8, 8);
 
 	riscvv_fft8x8_complex(block);
 

@@ -520,6 +520,7 @@ static void init_hwinfo(void) {
 				printf("SVE width: %d\n", nnp_hwinfo.simd_width);
 			#elif NNP_BACKEND_RISCV
 				nnp_hwinfo.simd_width =  __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
+				printf("RISCVV width: %d\n", nnp_hwinfo.simd_width);
 			#else
 				nnp_hwinfo.simd_width = 1;
 			#endif

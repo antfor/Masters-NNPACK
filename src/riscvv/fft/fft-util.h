@@ -58,6 +58,56 @@ static inline __epi_2xf32 dupq_f(float *quad, long gvl)
     return __builtin_epi_vload_indexed_2xf32(quad, indices, gvl);
 }
 
+static inline __epi_2xf32 dupn_f(float *quad, int N, long gvl)
+{
+
+    // ind_a = 0, 1, 2, 3, 4, 5, 6, 7, 8
+    __epi_2xi32 increasing = __builtin_epi_vid_2xi32(gvl);
+
+    // 4, 4, 4, 4...
+    __epi_2xi32 n = __builtin_epi_vmv_v_x_2xi32(N, gvl);
+   
+
+    // quads = 0, 0, 0, 0, 1, 1, 1, 1...
+    __epi_2xi32 quads = __builtin_epi_vdiv_2xi32(increasing, n, gvl);
+    // quads = 0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8...
+    quads = __builtin_epi_vmul_2xi32(quads, n, gvl);
+
+    // increasing - 4 * quads = 0, 1, 2, 3, 0, 1, 2, 3, 
+    __epi_2xi32 indices = __builtin_epi_vsub_2xi32(increasing, quads, gvl);
+    // multiply by four for byte adressing in RVV
+    __epi_2xi32 four = __builtin_epi_vmv_v_x_2xi32(4, gvl);
+    indices = __builtin_epi_vmul_2xi32(indices, four, gvl);
+
+    // Load from indices to get vector of 4 repeating values
+    return __builtin_epi_vload_indexed_2xf32(quad, indices, gvl);
+}
+
+
+static inline __epi_2xi32 dupn_i(uint32_t *quad, int N ,long gvl)
+{
+
+    // ind_a = 0, 1, 2, 3, 4, 5, 6, 7, 8
+    __epi_2xi32 increasing = __builtin_epi_vid_2xi32(gvl);
+
+    // 4, 4, 4, 4...
+    __epi_2xi32 n = __builtin_epi_vmv_v_x_2xi32(N, gvl);
+
+    // quads = 0, 0, 0, 0, 1, 1, 1, 1...
+    __epi_2xi32 quads = __builtin_epi_vdiv_2xi32(increasing, n, gvl);
+    // quads = 0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8...
+    quads = __builtin_epi_vmul_2xi32(quads, n, gvl);
+
+    // increasing - 4 * quads = 0, 1, 2, 3, 0, 1, 2, 3, 
+    __epi_2xi32 indices = __builtin_epi_vsub_2xi32(increasing, quads, gvl);
+    // multiply by four for byte adressing in RVV
+    __epi_2xi32 four = __builtin_epi_vmv_v_x_2xi32(4, gvl);
+    indices = __builtin_epi_vmul_2xi32(indices, four, gvl);
+
+    // Load from indices to get vector of 4 repeating values
+    return __builtin_epi_vload_indexed_unsigned_2xi32(quad, indices, gvl);
+}
+
 //--index--------------------------------------------------------------
 //todo jump not mad to byte?
 static inline __epi_2xi32 indexA(__uint32_t *ind, __uint32_t N, __uint32_t jump, long gvl)
@@ -187,6 +237,17 @@ static inline __epi_2xi32 zip_concat_16(long gvl)
     return indexA((uint32_t []){0, 1, 2, 3, gvl/2+0, gvl/2+1, gvl/2+2, gvl/2+3}, 8, 4, gvl);
 }
 
+
+static inline __epi_2xi32 zip_interleave_16(long gvl)
+{
+    return indexA((uint32_t []){0, gvl/2+0, 1, gvl/2+1, 2, gvl/2+2, 3, gvl/2+3}, 8, 4, gvl);
+}
+
+static inline __epi_2xi32 zip_mix_16(long gvl)
+{
+     return indexA((uint32_t []){0, 1, gvl/2+0, gvl/2+1, 2, 3, gvl/2+2, gvl/2+3}, 8, 4, gvl);
+}
+
 //--ind-----------------------------------------------------------------
 
 static inline __epi_2xi32 get_ind_even(long gvl)
@@ -194,11 +255,10 @@ static inline __epi_2xi32 get_ind_even(long gvl)
     return __builtin_epi_vmul_2xi32(__builtin_epi_vid_2xi32(gvl),__builtin_epi_vmv_v_x_2xi32(2, gvl), gvl);
 }
 
-static inline __epi_2xi32 get_ind_odd(long gvl)
+
+static inline __epi_2xi32 get_ind_odd(__epi_2xi32 even,long gvl)
 {
-    __epi_2xi32 ind_np = __builtin_epi_vadd_2xi32(__builtin_epi_vid_2xi32(gvl),__builtin_epi_vmv_v_x_2xi32(1, gvl), gvl);
-    ind_np = __builtin_epi_vmul_2xi32(ind_np ,__builtin_epi_vmv_v_x_2xi32(2, gvl), gvl);
-    return __builtin_epi_vsub_2xi32(ind_np, __builtin_epi_vmv_v_x_2xi32(1, gvl), gvl);
+    return __builtin_epi_vsadd_2xi32(even, __builtin_epi_vmv_v_x_2xi32(1, gvl), gvl);
 }
 
 static inline __epi_2xi32 get_ind_low_BLOCK(int BLOCK_SIZE, long gvl)
@@ -210,6 +270,17 @@ static inline __epi_2xi32 get_ind_high_BLOCK(__epi_2xi32 ind_low, int BLOCK_SIZE
 {
     return __builtin_epi_vadd_2xi32(ind_low, __builtin_epi_vmv_v_x_2xi32(BLOCK_SIZE/4, gvl), gvl);
 }
+
+static inline __epi_2xi32 get_ind_tetra_0(long gvl)
+{
+    return indexN(gvl, 0, 1, 4, 2);
+}
+
+static inline __epi_2xi32 get_ind_tetra_1(__epi_2xi32 ind_0, long gvl)
+{
+    return __builtin_epi_vadd_2xi32(ind_0, __builtin_epi_vmv_v_x_2xi32(2, gvl), gvl);
+}
+
 
 //--gemm-----------------------------------------------------------------
 

@@ -291,3 +291,33 @@ static inline void riscvv_ifft8x8_real(
 
 //--16x16--------------------------------------------------------------
 
+static inline void riscvv_fft16x16_real(
+	const float t0[restrict static 1],
+	const float t8[restrict static 1],
+	size_t stride_t,
+	uint32_t row_offset, uint32_t row_count,
+	uint32_t column_offset, uint32_t column_count,
+	float f[restrict static 1])
+{
+	float w[16 * column_count]; //todo make in place
+
+	fft8xNr(t0, t8, stride_t, row_offset, row_count, column_offset, column_count, w);
+
+	complex_to_real_NxNc(w, f, column_offset, column_count, 16);	
+
+	fftN_to_fft2N(w,8,f,16,column_offset,column_count);
+
+}
+
+
+static inline void riscvv_ifft16x16_real(float block[restrict static 256], size_t column_count){
+	
+	float w[16 * column_count]; //todo make in place
+
+	real_to_complex_NxNc(block, w, column_count, 16);
+
+	ifftN_to_ifft2N(block, 128, w, 16, column_count);
+
+	riscvv_ifft8xNr(w, block, column_count);
+
+}
