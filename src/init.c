@@ -4,14 +4,17 @@
 
 #include <pthread.h>
 
-#include <cpuinfo.h>
-
 #include <nnpack.h>
 #include <nnpack/hwinfo.h>
 #include <nnpack/blas.h>
 #include <nnpack/transform.h>
 #include <nnpack/relu.h>
 #include <nnpack/softmax.h>
+
+#if NNP_BACKEND_SVE
+#include <arm_sve.h>
+#endif
+#include <stdio.h>
 
 struct hardware_info nnp_hwinfo = { };
 static pthread_once_t hwinfo_init_control = PTHREAD_ONCE_INIT;
@@ -170,7 +173,7 @@ static pthread_once_t hwinfo_init_control = PTHREAD_ONCE_INIT;
 			[6] = nnp_shdotxf7__psimd,
 			[7] = nnp_shdotxf8__psimd,
 		};
-	#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE
+	#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE || NNP_BACKEND_RISCV
 		static const nnp_sdotxf_function sdotxf[8] = {
 			[0] = nnp_sdotxf1__scalar,
 			[1] = nnp_sdotxf2__scalar,
@@ -511,8 +514,20 @@ static void init_hwinfo(void) {
 #endif /* !NNP_INFERENCE_ONLY */
 			};
 			nnp_hwinfo.supported = cpuinfo_has_arm_neon();
-		#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE
-			nnp_hwinfo.simd_width = 1;
+		#elif NNP_BACKEND_SCALAR || NNP_BACKEND_SVE || NNP_BACKEND_RISCV
+			#if NNP_BACKEND_SVE
+				nnp_hwinfo.simd_width = svcntw();
+				printf("SVE width: %d\n", nnp_hwinfo.simd_width);
+			#elif NNP_BACKEND_RISCV
+				nnp_hwinfo.simd_width =  __builtin_epi_vsetvlmax(__epi_e32, __epi_m1);
+				printf("RISCVV width: %d\n", nnp_hwinfo.simd_width);
+			#else
+				nnp_hwinfo.simd_width = 1;
+			#endif
+			#if NNP_BACKEND_SVE
+				nnp_hwinfo.transforms.fft16x16_kernel = (nnp_transform_2d_with_offset) nnp_fft16x16_kernel__sve;
+				//nnp_hwinfo.transforms.fft16x16_kernel = (nnp_transform_2d_with_channels) nnp_fft16x16_kernel__sve;
+			#endif
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_store = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 			nnp_hwinfo.transforms.fft8x8_with_offset_and_stream = (nnp_transform_2d_with_offset) nnp_fft8x8_with_offset__scalar;
 #if !NNP_INFERENCE_ONLY
@@ -578,10 +593,33 @@ static void init_hwinfo(void) {
 				.cX_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_only_2x2__scalar,
 				.cX_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_upto_2x2__scalar,
 #endif /* !NNP_INFERENCE_ONLY */
+				#if NNP_BACKEND_SCALAR
 				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2__scalar,
 				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2__scalar,
 				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2__scalar,
 				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2__scalar,
+				#elif NNP_BACKEND_SVE
+				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2__sve,
+				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2__sve,
+				.s4cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_2048__sve,
+				.s4cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_2048__sve,			
+
+				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2__sve,
+				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2__sve,
+				.cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_2048__sve,
+				.cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_2048__sve,
+				#elif NNP_BACKEND_RISCV
+				.s4cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_FFT8x8__riscvv,
+				.s4cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_FFT8x8__riscvv,
+				.s4cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_s2gemm_only_2x2_FFT16x16__riscvv,
+				.s4cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_s2gemm_upto_2x2_FFT16x16__riscvv,			
+
+				.cX_conjb_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_FFT8x8__riscvv,
+				.cX_conjb_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_FFT8x8__riscvv,
+				.cX_conjb_only_mr_x_nr_FFT16 = (nnp_fast_tuple_gemm_function) nnp_cgemm_conjb_only_2x2_FFT16x16__riscvv,
+				.cX_conjb_upto_mr_x_nr_FFT16 = (nnp_full_tuple_gemm_function) nnp_cgemm_conjb_upto_2x2_FFT16x16__riscvv,
+
+				#endif
 #if !NNP_INFERENCE_ONLY
 				.s4cX_conjb_transc_only_mr_x_nr = (nnp_fast_tuple_gemm_function) nnp_s2gemm_transc_only_2x2__scalar,
 				.s4cX_conjb_transc_upto_mr_x_nr = (nnp_full_tuple_gemm_function) nnp_s2gemm_transc_upto_2x2__scalar,
@@ -599,9 +637,9 @@ static void init_hwinfo(void) {
 }
 
 enum nnp_status nnp_initialize(void) {
-	if (!cpuinfo_initialize()) {
+	/*if (!cpuinfo_initialize()) {
 		return nnp_status_out_of_memory;
-	}
+	}*/
 	pthread_once(&hwinfo_init_control, &init_hwinfo);
 	if (nnp_hwinfo.supported) {
 		return nnp_status_success;
@@ -611,6 +649,6 @@ enum nnp_status nnp_initialize(void) {
 }
 
 enum nnp_status nnp_deinitialize(void) {
-	cpuinfo_deinitialize();
+	//cpuinfo_deinitialize();
 	return nnp_status_success;
 }

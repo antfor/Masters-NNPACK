@@ -124,6 +124,28 @@ void nnp_cgemm_conjb_upto_2x2__scalar(uint32_t mr, uint32_t nr, size_t k, size_t
 void nnp_cgemm_conjb_transc_only_2x2__scalar(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
 void nnp_cgemm_conjb_transc_upto_2x2__scalar(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
 
+void nnp_cgemm_conjb_only_2x2__sve(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_cgemm_conjb_upto_2x2__sve(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_cgemm_conjb_only_2x2_2048__sve(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_cgemm_conjb_upto_2x2_2048__sve(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+
+void nnp_s2gemm_only_2x2__sve(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_s2gemm_upto_2x2__sve(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_s2gemm_only_2x2_2048__sve(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_s2gemm_upto_2x2_2048__sve(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+
+
+void nnp_cgemm_conjb_only_2x2_FFT8x8__riscvv(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_cgemm_conjb_upto_2x2_FFT8x8__riscvv(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_cgemm_conjb_only_2x2_FFT16x16__riscvv(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_cgemm_conjb_upto_2x2_FFT16x16__riscvv(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+
+void nnp_s2gemm_only_2x2_FFT8x8__riscvv(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_s2gemm_upto_2x2_FFT8x8__riscvv(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_s2gemm_only_2x2_FFT16x16__riscvv(size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+void nnp_s2gemm_upto_2x2_FFT16x16__riscvv(uint32_t mr, uint32_t nr, size_t k, size_t update, const float* a, const float* b, float* c, size_t row_stride_c);
+
+
 void nnp_sdotxf1__avx2(const float* x, const float* y, size_t stride_y, float* sum, size_t n);
 void nnp_sdotxf2__avx2(const float* x, const float* y, size_t stride_y, float* sum, size_t n);
 void nnp_sdotxf3__avx2(const float* x, const float* y, size_t stride_y, float* sum, size_t n);

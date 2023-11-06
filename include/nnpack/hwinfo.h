@@ -37,9 +37,14 @@ struct cache_blocking_info {
 };
 
 #if NNP_BACKEND_SCALAR
+	//#define NNP_COMPLEX_TUPLE_INDEX 1
 	#define NNP_COMPLEX_TUPLE_INDEX 2
 #else
 	#define NNP_COMPLEX_TUPLE_INDEX 1
+#endif
+
+#if NNP_BACKEND_SVE
+	typedef void (*nnp_transform_2d_with_channels)(void*, void*, size_t, size_t, uint32_t, uint32_t, uint32_t, uint32_t);
 #endif
 
 typedef void (*nnp_transform_2d)(const void*, void*, size_t, size_t, uint32_t, uint32_t);
@@ -66,6 +71,10 @@ typedef void (*nnp_softmax_function)(size_t, const float*, float*);
 typedef void (*nnp_inplace_softmax_function)(size_t, float*);
 
 struct transforms {
+#if NNP_BACKEND_SVE
+	nnp_transform_2d_with_offset fft8x8_kernel;
+	nnp_transform_2d_with_offset fft16x16_kernel;
+#endif
 	nnp_transform_2d_with_offset fft8x8_with_offset_and_store;
 	nnp_transform_2d_with_offset fft8x8_with_offset_and_stream;
 #if !NNP_INFERENCE_ONLY
@@ -150,6 +159,12 @@ struct cxgemm {
 	nnp_full_tuple_gemm_function s4cX_conjb_upto_mr_x_nr;
 	nnp_fast_tuple_gemm_function cX_conjb_only_mr_x_nr;
 	nnp_full_tuple_gemm_function cX_conjb_upto_mr_x_nr;
+	#if NNP_BACKEND_SVE || NNP_BACKEND_RISCV
+	nnp_fast_tuple_gemm_function s4cX_conjb_only_mr_x_nr_FFT16;
+	nnp_full_tuple_gemm_function s4cX_conjb_upto_mr_x_nr_FFT16;
+	nnp_fast_tuple_gemm_function cX_conjb_only_mr_x_nr_FFT16;
+	nnp_full_tuple_gemm_function cX_conjb_upto_mr_x_nr_FFT16;
+	#endif
 #if !NNP_INFERENCE_ONLY
 	nnp_fast_tuple_gemm_function s4cX_conjb_transc_only_mr_x_nr;
 	nnp_full_tuple_gemm_function s4cX_conjb_transc_upto_mr_x_nr;

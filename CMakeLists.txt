@@ -8,7 +8,7 @@ PROJECT(NNPACK C CXX ASM)
 
 # ---[ Options.
 SET(NNPACK_BACKEND "auto" CACHE STRING "Backend for micro-kernels implementation")
-SET_PROPERTY(CACHE NNPACK_BACKEND PROPERTY STRINGS auto psimd scalar)
+SET_PROPERTY(CACHE NNPACK_BACKEND PROPERTY STRINGS auto psimd scalar sve riscvv)
 OPTION(NNPACK_CONVOLUTION_ONLY "Build only NNPACK functions for convolutional layer" OFF)
 OPTION(NNPACK_INFERENCE_ONLY "Build only NNPACK functions for inference" OFF)
 OPTION(NNPACK_CUSTOM_THREADPOOL "Build NNPACK for custom thread pool" OFF)
@@ -57,7 +57,7 @@ IF(NOT CMAKE_SYSTEM_PROCESSOR)
   IF(NOT IOS)
     MESSAGE(WARNING "CMAKE_SYSTEM_PROCESSOR is not defined, automatic configuration may choose suboptimal options")
   ENDIF()
-ELSEIF(NOT NNPACK_TARGET_PROCESSOR MATCHES "^(i686|x86_64|armv5te|armv7-a|armv7l|armv7|armv7s|aarch64|arm64|arm64e)$")
+ELSEIF(NOT NNPACK_TARGET_PROCESSOR MATCHES "^(i686|x86_64|armv5te|armv7-a|armv7l|armv7|armv7s|aarch64|arm64|arm64e|riscv)$")
   MESSAGE(FATAL_ERROR "Unrecognized NNPACK_TARGET_PROCESSOR = ${NNPACK_TARGET_PROCESSOR}")
 ENDIF()
 
@@ -175,16 +175,6 @@ IF(NNPACK_BACKEND STREQUAL "x86-64")
   ELSE()
     SET(PEACHPY_PYTHONPATH "${PYTHON_SIX_SOURCE_DIR}:${PYTHON_PEACHPY_SOURCE_DIR}")
   ENDIF()
-ENDIF()
-
-IF(NOT DEFINED CPUINFO_SOURCE_DIR)
-  MESSAGE(STATUS "Downloading cpuinfo to ${CONFU_DEPENDENCIES_SOURCE_DIR}/cpuinfo (define CPUINFO_SOURCE_DIR to avoid it)")
-  CONFIGURE_FILE(cmake/DownloadCpuinfo.cmake "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo-download/CMakeLists.txt")
-  EXECUTE_PROCESS(COMMAND "${CMAKE_COMMAND}" -G "${CMAKE_GENERATOR}" .
-    WORKING_DIRECTORY "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo-download")
-  EXECUTE_PROCESS(COMMAND "${CMAKE_COMMAND}" --build .
-    WORKING_DIRECTORY "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo-download")
-  SET(CPUINFO_SOURCE_DIR "${CONFU_DEPENDENCIES_SOURCE_DIR}/cpuinfo" CACHE STRING "cpuinfo source directory")
 ENDIF()
 
 IF(NOT DEFINED FP16_SOURCE_DIR)
@@ -382,8 +372,39 @@ SET(NNPACK_BACKEND_SRCS
     src/sve/2d-fourier-16x16.c
     src/scalar/2d-winograd-8x8-3x3.c
     # Tuple GEMM
+    src/sve/blas/s2gemm.c
     src/scalar/blas/s2gemm.c
     src/sve/blas/cgemm-conjb.c
+    # Direct convolution
+    src/scalar/blas/conv1x1.c
+    # BLAS microkernels
+    src/scalar/blas/sgemm.c)
+  IF(NOT NNPACK_CONVOLUTION_ONLY)
+    LIST(APPEND NNPACK_BACKEND_SRCS
+      # ReLU and Softmax
+      src/scalar/relu.c
+      src/scalar/softmax.c
+      # BLAS microkernels
+      src/scalar/blas/sdotxf.c
+      src/scalar/blas/shdotxf.c)
+  ENDIF()
+  IF(NOT NNPACK_INFERENCE_ONLY)
+  LIST(APPEND NNPACK_BACKEND_SRCS
+    # Tuple GEMM
+    src/scalar/blas/s2gemm-transc.c
+    src/scalar/blas/cgemm.c
+    src/scalar/blas/cgemm-conjb-transc.c)
+  ENDIF()
+ELSEIF(NNPACK_BACKEND STREQUAL "riscvv")
+SET(NNPACK_BACKEND_SRCS
+    # Transformations
+    src/riscvv/2d-fourier-8x8.c
+    src/riscvv/2d-fourier-16x16.c
+    src/scalar/2d-winograd-8x8-3x3.c
+    # Tuple GEMM
+    src/riscvv/blas/s2gemm.c
+    src/scalar/blas/s2gemm.c
+    src/riscvv/blas/cgemm-conjb.c
     # Direct convolution
     src/scalar/blas/conv1x1.c
     # BLAS microkernels
@@ -511,7 +532,9 @@ IF(NNPACK_BACKEND STREQUAL "psimd")
 ELSEIF(NNPACK_BACKEND STREQUAL "scalar")
   TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SCALAR=1)
 ELSEIF(NNPACK_BACKEND STREQUAL "sve")
-  TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SCALAR=1)
+  TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_SVE=1)
+ELSEIF(NNPACK_BACKEND STREQUAL "riscvv")
+  TARGET_COMPILE_DEFINITIONS(nnpack PRIVATE NNP_BACKEND_RISCV=1)
 ENDIF()
 IF(NNPACK_CONVOLUTION_ONLY)
   TARGET_COMPILE_DEFINITIONS(nnpack PUBLIC NNP_CONVOLUTION_ONLY=1)
@@ -528,18 +551,6 @@ SET_TARGET_PROPERTIES(nnpack PROPERTIES PUBLIC_HEADER include/nnpack.h)
 ADD_LIBRARY(nnpack_reference_layers STATIC ${NNPACK_REFERENCE_LAYERS_SRCS})
 NNPACK_TARGET_ENABLE_C99(nnpack_reference_layers)
 TARGET_INCLUDE_DIRECTORIES(nnpack_reference_layers PUBLIC include)
-
-# ---[ Configure cpuinfo
-IF(NOT TARGET cpuinfo)
-  SET(CPUINFO_BUILD_TOOLS OFF CACHE BOOL "")
-  SET(CPUINFO_BUILD_UNIT_TESTS OFF CACHE BOOL "")
-  SET(CPUINFO_BUILD_MOCK_TESTS OFF CACHE BOOL "")
-  SET(CPUINFO_BUILD_BENCHMARKS OFF CACHE BOOL "")
-  ADD_SUBDIRECTORY(
-    "${CPUINFO_SOURCE_DIR}"
-    "${CONFU_DEPENDENCIES_BINARY_DIR}/cpuinfo")
-ENDIF()
-TARGET_LINK_LIBRARIES(nnpack PRIVATE cpuinfo)
 
 # ---[ Configure pthreadpool
 IF(NOT TARGET pthreadpool)
@@ -606,7 +617,7 @@ IF(NNPACK_BUILD_TESTS)
   TARGET_INCLUDE_DIRECTORIES(convolution-inference-smoketest PRIVATE test)
   TARGET_LINK_LIBRARIES(convolution-inference-smoketest PRIVATE -static nnpack nnpack_reference_layers gtest)
   ADD_TEST(convolution-inference-smoketest convolution-inference-smoketest)
-
+  
   ADD_EXECUTABLE(convolution-inference-fft8x8 test/convolution-inference/fft8x8-only.cc)
   NNPACK_TARGET_ENABLE_CXX11(convolution-inference-fft8x8)
   TARGET_INCLUDE_DIRECTORIES(convolution-inference-fft8x8 PRIVATE test)
