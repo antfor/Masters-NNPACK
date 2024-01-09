@@ -1,3 +1,19 @@
+Source code for my thesis on Vectorizing The Fast Fourier Transform (FFT) for faster AI Convolutions.
+
+Here is our implemntation of FFT16x16 and FFT8x8 for ARM Scalable Vector Extension (SVE) and RISC-V ”V” 
+
+Thesis: http://hdl.handle.net/20.500.12380/307458
+
+Source code: 
+
+   https://github.com/antfor/Masters-NNPACK
+
+   https://github.com/antfor/Masters-darknet
+
+
+# Fork of https://github.com/Maratyszcza/NNPACK
+
+
 <p align="center"><img src="https://maratyszcza.github.io/NNPACK/NNPACK.png" alt="NNPACK Logo" title="NNPACK"/></p>
 
 # NNPACK
